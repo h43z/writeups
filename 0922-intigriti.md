@@ -375,4 +375,19 @@ Now we can use `postMessage` to send it any message.
   i.contentWindow.postMessage('hello', '*')
 </script>
 ```
+But the challenge has a check in place to make sure it's only processing messages
+coming from the the right place, the `magic.php` page.
+You will find in the `index.php` this code.
 
+```
+window.addEventListener('message', e => {
+  if (e.source !== document.querySelector('#ball').contentWindow){
+    e.stopImmediatePropagation();
+  }
+});
+```
+This event listener is registered before the one where we want to get.
+And it propes if the source of the message is not window reference that is 
+`document.querySelector('#ball').contentWindow` meaning the embedded `magic.php`
+iframe it will stop the event propagation immediatly. Our messages send from
+outside will never reach the crucial parts of the application.
