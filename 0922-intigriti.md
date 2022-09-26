@@ -1,4 +1,4 @@
-still working on it!
+not finished writing! typos/grammar unchecked
 
 
 # Intigrity September 2022 Challenge
@@ -141,7 +141,7 @@ with `## Exception...`. This will always lead to an syntax error when feeded to
 
 It seems this whole thing with the `eval` is a trap and dead end in the challenge.
 
-The page continues with calling the function `shake()` with the parsed 
+The page continues with calling the function `shake()` with the parsed response.
 ```
   try{
     resp = JSON.parse(e);
@@ -150,7 +150,29 @@ The page continues with calling the function `shake()` with the parsed
   }
   shake(resp);
 ```
+That function then sends back data which seem to be some kind of action instructions 
+to the `top` which in the regular case is the `index.php` page. 
+```
+top.postMessage({
+  action: 'set',
+  element: '#ball',
+  attr: 'style',
+  value: 'left: ' + rand() + 'px; top: ' + rand() + 'px;'
+}, '*');
+} else {
+top.postMessage({
+  action: 'result',
+  value: resp.answer
+}, '*');
+ ```
 
+Using `top` here is kind of a bug, it should instead be `parent`. 
+Because if for example the challenge `index.php`
+itself was within an iframe, this `magic.php` would
+send the message to the uppermost `top` and not the `index.php`.
+
+For us this bug has no real meaning as there is nothing interesting gained from
+receiving whatever this code sends.
 
 Aside from the `eval` in `magic.php` there is only one other place that somehow interacts
 and manipulates the webpage. It's on main side `index.php`.
@@ -325,4 +347,32 @@ addEventListener('message', e => {
   }
 });
 ```
-How would we as attacker trigger any of those cases.
+
+How would we as attacker trigger any of those cases. The messages come from the
+`magic.php` page. What's important to realize is that any page can send another page
+messages as long as it has a window reference of the receiver.
+
+And how do you get such a reference you might ask. Two ways, either use the
+javascript `winref = open('//challenge-0922.intigriti.io')` which need user interaction 
+to be triggered or embed it in an iframe.
+
+We will do the latter.
+```
+<iframe id=i src="https://challenge-0922.intigriti.io"></iframe>
+<script>
+  // document.querySelector('iframe').contentWindow 
+  // document.getElementById('i').contentWindow
+  // window.i.contentWindow
+  // or simply
+  // i.contentWindow 
+  // all now hold a window reference to the embedded page
+</script>
+```
+Now we can use `postMessage` to send it any message.
+```
+<iframe id=i src="https://challenge-0922.intigriti.io"></iframe>
+<script>
+  i.contentWindow.postMessage('hello', '*')
+</script>
+```
+
