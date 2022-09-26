@@ -1,4 +1,4 @@
-not finished writing! typos/grammar unchecked
+not yet finished writing! typos/grammar unchecked
 
 
 # Intigrity September 2022 Challenge
@@ -370,9 +370,16 @@ We will do the latter.
 ```
 Now we can use `postMessage` to send it any message.
 ```
-<iframe id=i src="https://challenge-0922.intigriti.io"></iframe>
+<iframe id=i onload=run() src="https://challenge-0922.intigriti.io"></iframe>
 <script>
-  i.contentWindow.postMessage('hello', '*')
+  run = e => {
+    // the iframe onload event is not enough to be sure that
+    // the embedded iframe has finished loading it's javascript and set its
+    // own event handlers.
+    // to be extra sure we will wait for another 100 milliseconds before
+    // we send a message
+    setTimeout(_ => i.contentWindow.postMessage('hello', '*'), 100)
+  }
 </script>
 ```
 But the challenge has a check in place to make sure it's only processing messages
@@ -386,8 +393,74 @@ window.addEventListener('message', e => {
   }
 });
 ```
-This event listener is registered before the one where we want to get.
-And it propes if the source of the message is not window reference that is 
-`document.querySelector('#ball').contentWindow` meaning the embedded `magic.php`
-iframe it will stop the event propagation immediatly. Our messages send from
-outside will never reach the crucial parts of the application.
+This event listener above is registered before the one where we want to get at.
+And it probes if the source of the incoming message is not the window that is 
+`document.querySelector('#ball').contentWindow`, meaning the embedded `magic.php`
+iframe. If that is the case it will stop the event propagation immediately. 
+Our messages send from outside will never reach the the part where it does
+the `setAttribute` and `removeAttribute` until we make sure that 
+`e.source == document.querySelector('#ball').contentWindow`.
+
+Good thing is that cross orgin sites can actually change the location of iframes.
+That's pretty much the only thing a cross origin site can do to sites from another origin.
+It can't read what the location of an iframe is but it can set it.
+
+Here we try to `console.log` the `magic.php` iframe's location. See https://editor.43z.one/jxrf3
+```
+<iframe onload=run() id=i src="https://challenge-0922.intigriti.io/challenge/"></iframe>
+<script>
+  run = e => console.log(i.contentWindow.frames[0].location.href)
+</script>
+```
+And we get `Uncaught DOMException: Permission denied to get property "href" on cross-origin object`
+The domain, in this case `editor.43z.one` is not allowed to access properties of iframes that are on other 
+domains. That's a fundamental security mechanism of browsers, it's called the
+Same-Origin-Policy.
+
+BUT we can change the location! Without ever reading it.
+```
+<iframe onload=run() id=i src="https://challenge-0922.intigriti.io/challenge/"></iframe>
+<script>
+  run = e => i.contentWindow.frames[0].location = 'https://google.com'
+</script>
+```
+Or can't we because we get `Content Security Policy: The page’s settings blocked the loading of a resource at https://google.com/ (“default-src”).`
+We could but in this case the application makes use of another security mechanism the
+Content Security Policy.
+
+The policy is set in the `meta` tag of the challenge page.
+```
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' blob: 'unsafe-inline' challenge-0922.intigriti.io; script-src 'nonce-46512fdd35b5ad382767954b3f0c6f1e'; connect-src https:; object-src 'none'; base-uri 'none';">
+```
+For best understandment read the documentation at
+https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP
+
+Let's have a quick look at it at the csp in place. 
+```
+default-src 'self' blob: 'unsafe-inline' challenge-0922.intigriti.io; 
+
+script-src 'nonce-46512fdd35b5ad382767954b3f0c6f1e';
+connect-src https:; 
+object-src 'none';
+base-uri 'none';
+```
+It tell's us that `<scripts>` are only allwed to load if they have a nonce of `46512fdd35b5ad382767954b3f0c6f1e`.
+But what about an `<iframe>`? It does not mention the `frame-src` directive so
+the fallback will become `default-src`.
+
+There it says `self` meaning the same origin as the app. `challenge-0922.intigriti.io` which again is like self.
+`unsafe-inline`, unclear what that would mean in the contenxt of `frame-src`.
+And then `blob:`. This one is very interesting because we as attackers can create
+blob urls. It's as simple as.
+```
+  blobUrl = URL.createObjectURL(new Blob(['<h1>hello</h1>'], {type : 'text/html'})
+```
+And depending on from which context this is run you will get an URL looking similar to 
+this `blob:null/f38316a2-5232-4414-9bd2-1be6f65e2226`
+
+The browser itself created an html file with the contents `<h1>hello</h1>` internally. 
+That's why only the browser window that created the URL can open it.
+
+
+
+NOT YET FINISHED
