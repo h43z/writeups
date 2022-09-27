@@ -1,6 +1,3 @@
-not yet finished writing! typos/grammar unchecked
-
-
 # Intigrity September 2022 Challenge
 ###### writeup by [@h43z](https://twitter.com/h43z)
 
@@ -248,7 +245,7 @@ Two functions that let you set and remove any attribute from a tag.
 
 Reminder how a html tag looks like  `<tag attribute=value></tag>`.
 
-Fun fact removeAttribute only expects one parameter. In `s.removeAttribute(e.data.attr, e.data.value)`
+Fun fact `removeAttribute` only expects one parameter. In `s.removeAttribute(e.data.attr, e.data.value)`
 the second will not get used. Another bug with zero impact though.
 
 Setting an attribute could help us with the `innerHTML` from the result action.
@@ -438,7 +435,7 @@ Good thing is that cross origin sites can actually change the location of iframe
 That's pretty much the only thing a cross origin site can do to other sites.
 It can't read what the location of an `iframe` is but it can set it.
 
-Here we try to `console.log` the `magic.php` iframe's location. See https://editor.43z.one/jxrf3
+Here we try to `console.log` the `magic.php` iframe's location. See https://editor.43z.one/413rf
 ```
 <iframe onload=run() src="https://challenge-0922.intigriti.io/challenge/"></iframe>
 <script>
@@ -531,7 +528,7 @@ Because the `iframe` from `index.php` has the attribute set with `sandbox="allow
 it does only allow whats explicitly mentioned there. For modals like `alert()`, `prompt()`
 or `print()` it would need the extra attribute of  'allow-modals'. Let's just quickly
 change the `alert` to an `console.log` and see what `document.domain` says.
-https://editor.43z.one/mj1mm
+https://editor.43z.one/c8q7m
 ```
 <iframe onload=run() src="https://challenge-0922.intigriti.io/challenge/"></iframe>
 <script>
@@ -561,7 +558,7 @@ control over. And from that "blobbed" file we will then
 send a `postMessage` to the parent. This way `e.source` will be equal to 
 `document.querySelector('#ball').contentWindow`
 
-Like this https://editor.43z.one/15kr5
+Like this https://editor.43z.one/t39xj
 ```
 <iframe onload=run() src="https://challenge-0922.intigriti.io/challenge/"></iframe>
 <script>
@@ -931,11 +928,12 @@ But this time we got the nonce to make the Content Security Policy happy.
 </script>
 ```
 And here is the final exploit with all the glue code added to make it actually work.
+https://editor.43z.one/j91ak/i check the console to see progress
 ```
 <iframe onload="stage1('')" src="https://challenge-0922.intigriti.io/challenge/"></iframe>
 
 <script>
-  const sleepTime = 90
+  const sleepTime = 100
   finished = null
   listener = e => {
     if(!e.data.length) return
