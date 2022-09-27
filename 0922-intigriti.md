@@ -885,6 +885,7 @@ of some timeout counter and simply define that if we don't get a messsage in the
 
 And when that happens we can finally do what failed before. Create a new blob
 one last time that sends the 'set' message which changes the 'srcdoc' of the iframe.
+But this time we got the nonce to make the Content Security Policy happy.
 
 ```
 <iframe onload=stage1() id=i src="https://challenge-0922.intigriti.io/challenge/"></iframe>
