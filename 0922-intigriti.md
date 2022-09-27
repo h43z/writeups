@@ -60,10 +60,9 @@ some random value to the `question` parameter.
 Okay. Doesn't seem to be anything reflected here of interest. This will get parsed
 via 'JSON.parse' just fine and never reach the `eval(e)`.
 
-We should mess with the `question` parameter value for a while. Maybe some value
-will lead to a more interesting response. Multiple things could do that.
-A too long string, a number, too big number, special character. Basically anything that
-could break the server side code that generates the response.
+We should mess with the `question` parameter value for a bit. Maybe some value
+will lead to a more interesting response A too long string, a number, too big number, special character?
+Basically anything that could break the server side code that generates the response.
 
 We try a few values.
 ```
@@ -1002,5 +1001,5 @@ https://editor.43z.one/j91ak/i check the console to see progress
 </script>
 ```
 
-This was a long journey! You can shoot me a message [@h43z](https://twitter.com/h43z) or open a PR if 
-you have any questions.
+This was a long journey! You can shoot me a message [@h43z](https://twitter.com/h43z) or open an github issue if 
+you have any question.
