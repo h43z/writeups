@@ -1,5 +1,5 @@
 # Intigrity September 2022 Challenge
-###### writeup by [@h43z](https://twitter.com/h43z)
+###### Follow [@h43z](https://twitter.com/h43z) for more.
 
 ```
 For best learning effect always try to solve on your own first! 
