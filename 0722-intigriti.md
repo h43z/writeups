@@ -5,7 +5,7 @@
 For best learning effect always try to solve on your own first! 
 If you hit a dead end, 
 read writeup until you get new inspiration on how to proceed and stop reading further. 
-Repeat until sucessful solve.
+Repeat until successful solve.
 ```
 
 https://challenge-0722.intigriti.io/
