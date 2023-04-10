@@ -1,4 +1,4 @@
-# Intigrity July 2022 Challenge
+# Intigriti July 2022 Challenge
 ###### writeup by [@h43z](https://twitter.com/h43z), [h.43z.one](https://h.43z.one)
 
 ```

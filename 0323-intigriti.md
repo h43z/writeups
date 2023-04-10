@@ -1,4 +1,4 @@
-# 0323 Intigriti's March challenge
+# 0323 Intigriti March 2023 challenge
 Make sure to follow [h43z](https://twitter.com/h43z) on twitter for more fun stuff.
 
 ## Introduction
